@@ -10,6 +10,5 @@ Get the latest build from [Releases](https://github.com/3173270152/minis-pro/rel
 
 | 文件 / File | 适用 / For |
 |---|---|
-| `Minis-iOS14-TrollStore.tipa` | iOS 14 / 15，TrollStore 安装（不含「文件」App 扩展）<br>iOS 14–15 via TrollStore (without the Files extension) |
-| `Minis-TrollStore.tipa` | iOS 16 及以上，TrollStore 安装<br>iOS 16+ via TrollStore |
+| `Minis-TrollStore.tipa` | iOS 14 及以上，TrollStore 安装（iOS 14 / 15 请勿在「文件」App 中启用 Minis Files）<br>iOS 14+ via TrollStore (on iOS 14 / 15, do not enable Minis Files in the Files app) |
 | `Minis-unsigned.ipa` | 未签名，用自签工具安装<br>Unsigned, for sideload signers |
