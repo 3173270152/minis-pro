@@ -16,7 +16,12 @@ float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
 float fbm(vec2 p){ float a = 0.0, w = 0.5; for (int i = 0; i < 4; i++) { a += w * n2(p); p = p * 2.03 + 7.1; w *= 0.5; } return a; }
 void vertex(){
-	float y = UV.y; vy = y;
+	float y = clamp(0.5 - VERTEX.y, 0.0, 1.0); vy = y;
+	// teardrop profile: narrow at the nozzle, swells, then tapers to a point (no flat end)
+	vec2 rr = normalize(VERTEX.xz + vec2(1e-5));
+	float prof = layer < 0.5 ? (0.55 + 0.25 * y) * (1.0 - smoothstep(0.35, 1.0, y) * 0.92)
+		: (0.5 + 0.6 * smoothstep(0.0, 0.3, y)) * (1.0 - smoothstep(0.4, 1.0, y) * 0.9);
+	VERTEX.xz = rr * prof;
 	float t = TIME + seed * 13.0;
 	// flutter: radius breathes and the column snakes, more toward the tail
 	float k = smoothstep(0.05, 1.0, y) * (layer > 0.5 ? 1.0 : 0.35);

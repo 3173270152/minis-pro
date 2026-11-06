@@ -58,7 +58,7 @@ var spec_track := true
 var modules: Array = []       # feature modules: each has setup(game) and tick(dt); see scripts/README_modules.md
 signal phase_changed(p: String)
 ## feature modules loaded if present (each file owned by one workstream)
-const MODULE_FILES := ["res://scripts/vfx.gd", "res://scripts/engine_audio.gd", "res://scripts/mfd.gd", "res://scripts/crewday.gd", "res://scripts/orbit.gd", "res://scripts/entry.gd", "res://scripts/spectator.gd", "res://scripts/disaster.gd"]
+const MODULE_FILES := ["res://scripts/vfx.gd", "res://scripts/engine_audio.gd", "res://scripts/mfd.gd", "res://scripts/crewday.gd", "res://scripts/orbit.gd", "res://scripts/entry.gd", "res://scripts/spectator.gd", "res://scripts/clouds.gd", "res://scripts/disaster.gd"]
 
 func set_phase(p: String) -> void:
 	if phase == p: return
@@ -77,7 +77,7 @@ func _load_modules() -> void:
 const VIEWS := {
 	"pad": [Vector3(48, 10, 95), Vector3(-4, 34, 0)], "wide": [Vector3(260, 30, 330), Vector3(0, 40, 0)],
 	"base": [Vector3(14, 4.0, 18), Vector3(0, 12, 0)], "top": [Vector3(9, 62, 13), Vector3(0, 59, 0)],
-	"tower": [Vector3(30, 50, -30), Vector3(-13, 45, 0)], "plumex": [Vector3(45, Pad.DECK + 5, 45), Vector3(0, Pad.DECK - 25, 0)], "capx": [Vector3(5, 58, 5), Vector3(0, 56.5, 0)],
+	"tower": [Vector3(30, 50, -30), Vector3(-13, 45, 0)], "hiview": [Vector3(30, Pad.DECK + 8, 30), Vector3(0, Pad.DECK - 250, 1500)], "plumex": [Vector3(45, Pad.DECK + 5, 45), Vector3(0, Pad.DECK - 25, 0)], "capx": [Vector3(5, 58, 5), Vector3(0, 56.5, 0)],
 }
 
 var loading: CanvasLayer
@@ -121,6 +121,8 @@ func _build() -> void:
 	pad = Pad.new()
 	await _step("正在加载地球（NASA 卫星影像）…")
 	earth = Earth.new(); site.add_child(earth)
+	var tm: ShaderMaterial = world.terrain.material_override
+	tm.set_shader_parameter("day", load("res://tex/earth/2_no_clouds_4k.jpg")); tm.set_shader_parameter("inv_b", Basis(earth.surf.basis).orthonormalized().inverse())
 	await _step("正在组装启航号运载火箭…")
 	rocket.position = Vector3(0, Pad.DECK, 0); add_child(rocket)
 	pad.veh_top = rocket.top; pad.veh_cap = rocket.y_cap; pad.veh_hatch_x = rocket.cap_mount.position.x - rocket.r_hatch
@@ -424,7 +426,7 @@ func _flight(dt: float) -> void:
 	var ef := smoothstep(12000.0, 45000.0, alt)
 	earth.set_fade(ef); world.terrain.visible = alt < 90000.0; pad.visible = alt < 30000.0
 	world.sky_mat.energy_multiplier = lerpf(1.0, 0.04, smoothstep(10000.0, 70000.0, alt))
-	world.env.fog_density = 0.000022 * (1.0 - smoothstep(2000.0, 20000.0, alt))
+	world.env.fog_density = 0.000022 * (1.0 - smoothstep(2000.0, 20000.0, alt)) + float(get_meta("cloud_fog", 0.0))
 	world.env.volumetric_fog_enabled = alt < 15000.0 and not OS.has_feature("mobile")
 	# debris falls in the site frame: gravity + drag
 	for dd in detached:

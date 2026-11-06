@@ -23,7 +23,8 @@ var red: StandardMaterial3D
 var grating: StandardMaterial3D
 
 func _ready() -> void:
-	concrete = U.tri_mat(Color(0.64, 0.63, 0.6), 0.88, 0.0, 1.2, 1.2)
+	concrete = U.tri_mat(Color(0.95, 0.95, 0.93), 0.88, 0.0, 1.2, 1.2)
+	concrete.albedo_texture = load("res://tex/terrain/concrete.jpg"); concrete.uv1_scale = Vector3(0.22, 0.22, 0.22)
 	steel = U.mat(Color(0.82, 0.83, 0.85), 0.42, 0.65, 1.2)
 	red = U.mat(Color(0.66, 0.11, 0.08), 0.5, 0.35, 1.0)
 	grating = U.mat(Color(0.35, 0.36, 0.37), 0.6, 0.7, 2.0)

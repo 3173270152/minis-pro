@@ -62,7 +62,7 @@ func height(x: float, z: float) -> float:
 	var h00 := grid[j * GN + i]; var h10 := grid[j * GN + i + 1]; var h01 := grid[(j + 1) * GN + i]; var h11 := grid[(j + 1) * GN + i + 1]
 	var hh := lerpf(lerpf(h00, h10, fu), lerpf(h01, h11, fu), fv)
 	var d := sqrt(x * x + z * z)
-	return hh + noise.get_noise_2d(x * 3.0, z * 3.0) * 1.2 * smoothstep(1800.0, 5000.0, d)
+	return hh + noise.get_noise_2d(x * 3.0, z * 3.0) * 1.2 * smoothstep(1800.0, 5000.0, d) - d * d / (2.0 * 6371000.0)   # Earth curvature (matches the shader)
 
 func make_terrain_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -92,7 +92,7 @@ func make_terrain_mesh() -> ArrayMesh:
 func _build_terrain() -> void:
 	var mesh: Mesh = load("res://gen/terrain.res") if ResourceLoader.exists("res://gen/terrain.res") else make_terrain_mesh()
 	terrain = MeshInstance3D.new(); terrain.mesh = mesh
-	terrain.material_override = U.shader_mat("res://shaders/terrain.gdshader", {"nz": U.noise_tex(0.01, false, 31, 1024, 6), "nn": U.noise_tex(0.02, true, 32, 1024, 6, 4.0), "macro_col": load("res://tex/terrain/macro_color.png"), "macro_nrm": load("res://tex/terrain/macro_normal.png")})
+	terrain.material_override = U.shader_mat("res://shaders/terrain.gdshader", {"nz": U.noise_tex(0.01, false, 31, 1024, 6), "nn": U.noise_tex(0.02, true, 32, 1024, 6, 4.0), "macro_col": load("res://tex/terrain/macro_color.png"), "macro_nrm": load("res://tex/terrain/macro_normal.png"), "t_grass": load("res://tex/terrain/grass.jpg"), "t_gsnow": load("res://tex/terrain/grass_snow.jpg"), "t_snow": load("res://tex/terrain/snow.jpg"), "t_srock": load("res://tex/terrain/snow_rock.jpg")})
 	terrain.extra_cull_margin = 2000.0
 	add_child(terrain)
 	# walkable collision for the levelled site

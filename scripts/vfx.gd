@@ -64,7 +64,7 @@ func _colors(kind: String) -> Dictionary:
 	return {"hot": Color(1, 0.78, 0.42), "mid": Color(1, 0.38, 0.06), "tail": Color(0.6, 0.18, 0.03), "len": 1.0, "w": 1.0}
 
 func _cone(p: Node3D, sh: Shader, layer: float, col: Dictionary) -> MeshInstance3D:
-	var m := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.5 if layer < 0.5 else 0.75; cm.bottom_radius = 0.8 if layer < 0.5 else 2.6; cm.height = 1.0; cm.radial_segments = 28; cm.rings = 24
+	var m := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 1.0; cm.bottom_radius = 1.0 if layer < 0.5 else 2.2; cm.height = 1.0; cm.radial_segments = 28; cm.rings = 24
 	cm.cap_top = false; cm.cap_bottom = false; m.mesh = cm
 	var mat := ShaderMaterial.new(); mat.shader = sh; mat.set_shader_parameter("layer", layer)
 	mat.set_shader_parameter("hot", col.hot); mat.set_shader_parameter("mid", col.mid); mat.set_shader_parameter("tail", col.tail)
