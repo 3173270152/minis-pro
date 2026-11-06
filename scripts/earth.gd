@@ -12,7 +12,7 @@ var mat_c: ShaderMaterial
 var mat_a: ShaderMaterial
 
 func _ready() -> void:
-	position = Vector3(0, -R, 0)
+	top_level = true
 	# rotate the globe so Jiuquan (40.96 N, 100.3 E) sits under the pad
 	var lat := deg_to_rad(40.96); var lon := deg_to_rad(100.3)
 	var b := Basis(Vector3.UP, -lon - PI * 0.5)
@@ -35,6 +35,13 @@ func _ready() -> void:
 func set_fade(f: float) -> void:
 	visible = f > 0.001
 	mat_s.set_shader_parameter("fade", f); mat_c.set_shader_parameter("fade", f); mat_a.set_shader_parameter("fade", f)
+
+const K := 60.0
+## keep the globe within the camera's far plane: shrink it by K toward the camera (perspective is unchanged)
+func place(cam_pos: Vector3, centre: Vector3) -> void:
+	global_position = cam_pos + (centre - cam_pos) / K
+	scale = Vector3.ONE / K
+	for m in [mat_s, mat_c, mat_a]: m.set_shader_parameter("kscale", K)
 
 func set_sun(dir: Vector3) -> void:
 	for m in [mat_s, mat_c, mat_a]: m.set_shader_parameter("sun_dir", dir.normalized())
