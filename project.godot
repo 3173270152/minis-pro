@@ -1,0 +1,36 @@
+config_version=5
+
+[application]
+config/name="启航号"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=4
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+textures/vram_compression/import_etc2_astc=true
+rendering_device/driver.ios="metal"
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="forward_plus"
+anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/size=8192
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+textures/default_filters/anisotropic_filtering_level=4
+environment/ssao/quality=2
+anti_aliasing/quality/screen_space_aa=1
+anti_aliasing/quality/use_taa=false
+
+[physics]
+3d/physics_engine="Jolt Physics"
+
+[debug]
+gdscript/warnings/inference_on_variant=0
+gdscript/warnings/unused_variable=0
+gdscript/warnings/unused_local_constant=0
+gdscript/warnings/narrowing_conversion=0
+gdscript/warnings/integer_division=0

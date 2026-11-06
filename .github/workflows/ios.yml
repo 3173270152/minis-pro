@@ -1,0 +1,44 @@
+name: iOS unsigned IPA
+on:
+  push:
+    branches: [qihang-godot]
+  workflow_dispatch:
+env:
+  GODOT: 4.4.1
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Godot + iOS export template
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_macos.universal.zip
+          unzip -q godot.zip
+          curl -sSL -o tpl.tpz https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_export_templates.tpz
+          T="$HOME/Library/Application Support/Godot/export_templates/${GODOT}.stable"
+          mkdir -p "$T"
+          unzip -q -j tpl.tpz templates/ios.zip templates/version.txt -d "$T"
+          rm tpl.tpz
+      - name: Import & export Xcode project
+        run: |
+          G="Godot.app/Contents/MacOS/Godot"
+          "$G" --headless --path . --import || true
+          mkdir -p build
+          "$G" --headless --path . --export-release "iOS" build/qihang.ipa
+          ls -la build
+      - name: Build unsigned app
+        run: |
+          cd build
+          PROJ=$(ls -d *.xcodeproj | head -1)
+          SCHEME=$(xcodebuild -list -project "$PROJ" -json | python3 -c "import sys,json;print(json.load(sys.stdin)['project']['schemes'][0])")
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath qihang.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" archive | tail -40
+          APP=$(ls -d qihang.xcarchive/Products/Applications/*.app | head -1)
+          mkdir -p Payload && cp -R "$APP" Payload/
+          zip -qry ../qihang-unsigned.ipa Payload
+          ls -la ../qihang-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qihang-unsigned-ipa
+          path: qihang-unsigned.ipa
