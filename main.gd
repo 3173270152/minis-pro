@@ -162,6 +162,7 @@ func _build() -> void:
 		sfx.line("hatch", 1.0); sfx.line("seat1", 3.0)
 	_update_sun()
 	_load_modules()
+	if "--guide" in OS.get_cmdline_user_args(): guide = true; _guide_next()
 	await _step("准备就绪")
 	loading.queue_free(); ready_done = true
 
@@ -171,10 +172,13 @@ func _quality() -> void:
 	Engine.max_fps = 120
 	if q == "quality" and not OS.has_feature("mobile"): return
 	if not OS.has_feature("mobile") and q == "balanced": return
-	RenderingServer.directional_shadow_atlas_set_size(4096, true)
+	var fp := RenderingServer.get_current_rendering_method() == "forward_plus"
+	RenderingServer.directional_shadow_atlas_set_size(4096 if fp else 2048, true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_SOFT_LOW if fp else RenderingServer.SHADOW_QUALITY_HARD)
+	RenderingServer.positional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
 	var vp := get_viewport()
-	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2 if RenderingServer.get_current_rendering_method() == "forward_plus" else Viewport.SCALING_3D_MODE_BILINEAR
-	vp.scaling_3d_scale = {"fast": 0.5, "balanced": 0.67, "quality": 0.85}.get(q, 0.67)
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2 if fp else Viewport.SCALING_3D_MODE_FSR
+	vp.scaling_3d_scale = ({"fast": 0.5, "balanced": 0.67, "quality": 0.85} if fp else {"fast": 0.6, "balanced": 0.75, "quality": 0.9}).get(q, 0.75)
 	if q == "fast":
 		RenderingServer.directional_shadow_atlas_set_size(2048, true)
 		get_viewport().positional_shadow_atlas_size = 1024
@@ -506,6 +510,34 @@ func _camera(dt: float) -> void:
 		fov = 55.0 / zoom
 	cam.fov = lerpf(cam.fov, fov, minf(1.0, dt * 8.0))
 
+var gring: MeshInstance3D
+## yellow pulsing ring around the switch the guide wants next (drawn on top of everything)
+func _guide_ring(_dt: float) -> void:
+	if gring == null:
+		gring = MeshInstance3D.new(); var tm := TorusMesh.new(); tm.inner_radius = 0.036; tm.outer_radius = 0.044; tm.rings = 32; tm.ring_segments = 8; gring.mesh = tm
+		var m := StandardMaterial3D.new(); m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; m.no_depth_test = true; m.render_priority = 10
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; m.albedo_color = Color(1.0, 0.85, 0.1, 0.95); gring.material_override = m
+		gring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; add_child(gring)
+	var id: String = String(guide_step[0]) if guide and not guide_step.is_empty() else ""
+	if id == "" or id == "@eq" or not console.cells.has(id) or not console.cells[id].has("hit") or cam_mode != "seat":
+		gring.visible = false; hud.garrow.visible = false; return
+	var h: Node3D = console.cells[id].hit
+	gring.visible = true
+	var s := 1.0 + 0.15 * sin(Time.get_ticks_msec() * 0.008)
+	gring.global_transform = Transform3D(h.global_basis.orthonormalized() * Basis(Vector3.RIGHT, PI * 0.5) * Basis().scaled(Vector3(s, s, s)), h.global_position + h.global_basis.z.normalized() * 0.02)
+	# off-screen: an arrow at the screen edge points the way (turn your head toward it)
+	var vs := get_viewport().get_visible_rect().size
+	var behind := cam.is_position_behind(h.global_position)
+	var sp := cam.unproject_position(h.global_position)
+	var inside := not behind and Rect2(Vector2(40, 40), vs - Vector2(80, 80)).has_point(sp)
+	hud.garrow.visible = not inside
+	if not inside:
+		var c := vs * 0.5; var d := (sp - c) * (-1.0 if behind else 1.0)
+		if d.length() < 1.0: d = Vector2(1, 0)
+		var k := minf((vs.x * 0.5 - 50.0) / maxf(absf(d.x), 0.001), (vs.y * 0.5 - 50.0) / maxf(absf(d.y), 0.001))
+		hud.garrow.position = c + d * k - Vector2(30, 30); hud.garrow.rotation = d.angle()
+		hud.garrow.modulate.a = 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.008)
+
 func _body_r() -> float:
 	if stage >= 3: return 2.4
 	return {"saturn": 5.6, "fh": 6.6, "shuttle": 12.5}.get(rocket.kind, 2.6)
@@ -517,6 +549,7 @@ func _zoom_by(f: float) -> void:
 func _ui(dt: float) -> void:
 	hud.clock.text = Hud.fmt_t(T)
 	if frames % 20 == 0: hud.fps.text = "%d FPS" % Engine.get_frames_per_second()
+	_guide_ring(dt)
 	var st := "倒计时" if running and not lifted else ("计划内暂停 · HOLD" if not lifted else "上升段")
 	if held == "lcc": st = "计数暂停：发射条件不满足"
 	elif held == "int": st = "计数暂停：器上未转电"
@@ -553,7 +586,7 @@ func _ui(dt: float) -> void:
 	# tooltip under the crosshair
 	if cam_mode == "seat" and frames % 6 == 0:
 		var id := _pick(get_viewport().get_visible_rect().size * 0.5)
-		if id == "": hud.tip.text = ""
+		if id == "" or id.begins_with("MFD"): hud.tip.text = "多功能显示器 · 点击切换页面" if id != "" else ""
 		else:
 			var d := console.def_of(id); var k := console.kind_of(id); var on: bool = console.S.get(id, false)
 			var state := ""

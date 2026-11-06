@@ -485,7 +485,7 @@ func _build_cell(g: Node3D, vp: SubViewport, P: Dictionary, id: String, pos: Vec
 		if k == "g" or k == "gp": c.ig = P.ig; P.ig += 1
 	var hit := StaticBody3D.new(); hit.collision_layer = 1 << 10; hit.collision_mask = 0
 	var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(cell.x * 0.98, cell.y * 0.98, 0.06); cs.shape = bs
-	hit.position = Vector3(pos.x, pos.y - 0.004, 0.03); hit.add_child(cs); g.add_child(hit); hit.set_meta("ctl", id)
+	hit.position = Vector3(pos.x, pos.y - 0.004, 0.03); hit.add_child(cs); g.add_child(hit); hit.set_meta("ctl", id); c["hit"] = hit
 	cells[id] = c
 	_pose(c, true)
 

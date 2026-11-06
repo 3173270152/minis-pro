@@ -18,7 +18,7 @@ window/stretch/aspect="expand"
 textures/vram_compression/import_etc2_astc=true
 rendering_device/driver.ios="metal"
 renderer/rendering_method="forward_plus"
-renderer/rendering_method.mobile="forward_plus"
+renderer/rendering_method.mobile="mobile"
 anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/size=8192
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
@@ -32,6 +32,10 @@ anti_aliasing/quality/use_taa=false
 common/physics_ticks_per_second=120
 
 [debug]
+
+file_logging/enable_file_logging=true
+file_logging/enable_file_logging.pc=true
+file_logging/log_path="user://logs/godot.log"
 gdscript/warnings/inference_on_variant=0
 gdscript/warnings/unused_variable=0
 gdscript/warnings/unused_local_constant=0

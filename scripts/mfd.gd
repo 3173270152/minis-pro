@@ -28,7 +28,7 @@ func setup(game) -> void:
 		g.add_child(vp)
 		var p := Pane.new(); p.owner_mfd = self; p.idx = i; p.size = Vector2(W, H); vp.add_child(p)
 		var m := StandardMaterial3D.new(); m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; m.albedo_texture = vp.get_texture()
-		m.emission_enabled = false; q.material_override = m
+		m.emission_enabled = false; m.cull_mode = BaseMaterial3D.CULL_DISABLED; q.material_override = m
 		# hit area so a tap cycles the page (main routes ids "MFD<n>")
 		var body := StaticBody3D.new(); body.collision_layer = 1 << 10; body.collision_mask = 0
 		var cs := CollisionShape3D.new(); var bs := BoxShape3D.new()

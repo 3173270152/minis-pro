@@ -11,6 +11,7 @@ var objective: Label
 var sub_who: Label
 var sub_txt: Label
 var tip: Label
+var garrow: Label
 var tele: Label
 var proc_box: PanelContainer
 var proc_title: Label
@@ -55,8 +56,9 @@ func _ready() -> void:
 	_shadow(sub_txt); _shadow(sub_who)
 	# crosshair + control tooltip (centre)
 	cross = _label(root, "·", 30, Color(1, 1, 1, 0.8)); cross.set_anchors_preset(Control.PRESET_CENTER); cross.position = Vector2(-6, -22)
-	tip = _label(root, "", 16, Color(1, 1, 1)); tip.set_anchors_preset(Control.PRESET_CENTER); tip.position = Vector2(-220, 22); tip.size = Vector2(440, 60)
+	tip = _label(root, "", 16, Color(1, 1, 1)); tip.anchor_left = 0.5; tip.anchor_right = 0.5; tip.anchor_top = 0.5; tip.anchor_bottom = 0.5; tip.offset_left = -220; tip.offset_right = 220; tip.offset_top = 22; tip.offset_bottom = 82
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; _shadow(tip)
+	garrow = _label(root, "➤", 44, Color(1.0, 0.85, 0.1)); garrow.size = Vector2(60, 60); garrow.pivot_offset = Vector2(30, 30); garrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; garrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; garrow.visible = false; _shadow(garrow)
 	# procedure book (right)
 	proc_box = PanelContainer.new(); proc_box.set_anchors_preset(Control.PRESET_RIGHT_WIDE); proc_box.position = Vector2(-330, 200); proc_box.size = Vector2(310, 470)
 	var sty := StyleBoxFlat.new(); sty.bg_color = Color(0.03, 0.06, 0.1, 0.72); sty.border_color = Color(1, 1, 1, 0.15); sty.set_border_width_all(1); sty.set_corner_radius_all(4); sty.content_margin_left = 12; sty.content_margin_right = 12; sty.content_margin_top = 10; sty.content_margin_bottom = 10

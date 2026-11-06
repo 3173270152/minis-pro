@@ -158,8 +158,9 @@ func _main_panel() -> void:
 	# three multifunction displays across the top
 	screens = []
 	for i in 3:
-		var sc := MeshInstance3D.new(); var q := QuadMesh.new(); q.size = Vector2(0.3, 0.1875); sc.mesh = q; sc.position = Vector3((i - 1) * 0.35, 0.215, 0.004)
-		add_screen_bezel(panel_root, sc.position, Vector2(0.3, 0.1875)); panel_root.add_child(sc); screens.append(sc)
+		var sc := MeshInstance3D.new(); var q := QuadMesh.new(); q.size = Vector2(0.3, 0.1875); sc.mesh = q; sc.position = Vector3((i - 1) * 0.35, 0.215, 0.06)
+		var bz := add_screen_bezel(panel_root, sc.position, Vector2(0.3, 0.1875)); panel_root.add_child(sc); screens.append(sc)
+		sc.position.z = bz.position.z + bz.get_aabb().end.z * bz.scale.z + 0.002   # just proud of the bezel face
 	# support struts to the hull
 	for x in [-0.5, 0.5]:
 		var a := panel_root.to_global(Vector3(x, 0.25, -0.12)); var b := Vector3(a.x + 0.2, a.y + 0.35, a.z * 1.05)
@@ -170,10 +171,11 @@ func _main_panel() -> void:
 		U.beam(panel_root, Vector3(x * 0.95, -0.25, -0.05), Vector3(x, -0.25, 0.0), 0.012, m_alu)
 		U.beam(panel_root, Vector3(x * 0.95, 0.25, -0.05), Vector3(x, 0.25, 0.0), 0.012, m_alu)
 
-func add_screen_bezel(parent: Node3D, pos: Vector3, sz: Vector2) -> void:
-	U.rbox(parent, Vector3(sz.x + 0.05, sz.y + 0.05, 0.02), 0.006, pos + Vector3(0, 0, -0.008), U.mat(Color(0.08, 0.08, 0.09), 0.4, 0.3))
+func add_screen_bezel(parent: Node3D, pos: Vector3, sz: Vector2) -> MeshInstance3D:
+	var bz: MeshInstance3D = U.rbox(parent, Vector3(sz.x + 0.05, sz.y + 0.05, 0.02), 0.006, pos + Vector3(0, 0, -0.008), U.mat(Color(0.08, 0.08, 0.09), 0.4, 0.3))
 	for k in 6:   # soft keys along the bottom bezel
 		U.rbox(parent, Vector3(0.04, 0.016, 0.01), 0.003, pos + Vector3(-sz.x * 0.42 + k * sz.x * 0.168, -sz.y * 0.5 - 0.014, 0.0), U.mat(Color(0.35, 0.36, 0.38), 0.5, 0.4))
+	return bz
 
 ## console surfaces for the switch panels: {node, x, y, w, h}
 func surfaces() -> Array:
