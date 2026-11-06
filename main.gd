@@ -77,7 +77,7 @@ func _load_modules() -> void:
 const VIEWS := {
 	"pad": [Vector3(48, 10, 95), Vector3(-4, 34, 0)], "wide": [Vector3(260, 30, 330), Vector3(0, 40, 0)],
 	"base": [Vector3(14, 4.0, 18), Vector3(0, 12, 0)], "top": [Vector3(9, 62, 13), Vector3(0, 59, 0)],
-	"tower": [Vector3(30, 50, -30), Vector3(-13, 45, 0)], "capx": [Vector3(5, 58, 5), Vector3(0, 56.5, 0)],
+	"tower": [Vector3(30, 50, -30), Vector3(-13, 45, 0)], "plumex": [Vector3(45, Pad.DECK + 5, 45), Vector3(0, Pad.DECK - 25, 0)], "capx": [Vector3(5, 58, 5), Vector3(0, 56.5, 0)],
 }
 
 var loading: CanvasLayer

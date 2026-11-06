@@ -59,6 +59,7 @@ func _start() -> void:
 # ---------------- orbital module ----------------
 func _build_om() -> void:
 	om = Node3D.new(); om.position = Vector3(0, g.rocket.y_cap + 2.25, 0); g.rocket.add_child(om)
+	if g.rocket.get("ship_om") != null: g.rocket.ship_om.visible = false
 	var shell := U.mat(Color(0.86, 0.86, 0.82), 0.7, 0.05, 1.5); shell.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var prof := PackedVector2Array([Vector2(0.45, 0.0), Vector2(1.0, 0.3), Vector2(1.12, 1.0), Vector2(1.1, 1.9), Vector2(0.85, 2.5), Vector2(0.45, 2.75)])
 	U.put(om, U.lathe(prof, 48, 0.0, TAU, true), U.shader_mat("res://shaders/quilt.gdshader", {"nz": U.noise_tex(0.03, false, 61, 256, 4)}))

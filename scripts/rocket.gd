@@ -49,6 +49,7 @@ func _ready() -> void:
 		_interstage()
 		_second_stage()
 		_fairing()
+		_spacecraft()
 		_les()
 		_markings()
 	cap_mount = Node3D.new(); cap_mount.position.y = y_cap; add_child(cap_mount)
@@ -163,6 +164,39 @@ func _second_stage() -> void:
 	for k in 4:   # vernier engines
 		var a := TAU * k / 4.0
 		_engine(stage2, Vector3(sin(a) * 1.25, Y_S2_BOT - 0.2, cos(a) * 1.25), 0.35)
+
+# ---------- spacecraft stack inside the fairing: adapter, service module, (capsule from capsule.gd), orbital module ----------
+var ship_om: Node3D
+func _spacecraft() -> void:
+	var y0 := Y_S2_TOP; var ysm := y_cap - 0.34
+	var alu := U.mat(Color(0.72, 0.72, 0.7), 0.45, 0.6)
+	# payload adapter cone on top of stage 2 (separates with it)
+	U.put(stage2, U.lathe(PackedVector2Array([Vector2(R_CORE, y0), Vector2(1.55, y0 + 0.45), Vector2(1.42, y0 + 0.6)]), 64), U.mat(Color(0.88, 0.88, 0.86), 0.6, 0.1))
+	U.put(stage2, U.lathe(PackedVector2Array([Vector2(0.0, y0 + 0.02), Vector2(R_CORE - 0.02, y0 + 0.02)]), 48), alu)
+	# service module: radiator-banded cylinder + aft skirt, folded arrays, RCS quads; tagged "sa" so it drops at SM sep
+	var sm := Node3D.new(); sm.set_meta("sa", true); add_child(sm)
+	var rad := U.mat(Color(0.93, 0.93, 0.9), 0.35, 0.05)
+	var dark := U.mat(Color(0.2, 0.2, 0.22), 0.6, 0.5)
+	U.put(sm, U.lathe(PackedVector2Array([Vector2(1.42, y0 + 0.6), Vector2(1.42, y0 + 1.05), Vector2(1.36, y0 + 1.1), Vector2(1.36, ysm - 0.15), Vector2(1.25, ysm), Vector2(0.9, ysm + 0.02)]), 72), rad)
+	for k in 3: U.put(sm, U.lathe(PackedVector2Array([Vector2(1.37, y0 + 1.4 + k * 0.6), Vector2(1.385, y0 + 1.43 + k * 0.6), Vector2(1.37, y0 + 1.46 + k * 0.6)]), 72), dark)
+	for k in 4:
+		var a := TAU * k / 4.0 + PI / 4.0
+		var d := Vector3(sin(a), 0, cos(a))
+		U.box(sm, Vector3(0.18, 0.18, 0.12), d * 1.42 + Vector3(0, ysm - 0.5, 0), dark, Vector3(0, a, 0))
+		for j in 4: U.cyl(sm, 0.025, 0.04, 0.08, d * 1.5 + Vector3(0, ysm - 0.5 + (j - 1.5) * 0.06, 0), dark, 10, Vector3(0, 0, PI * 0.5))
+	for s in [-1, 1]:   # stowed solar array packs
+		U.box(sm, Vector3(0.12, 2.0, 0.9), Vector3(s * 1.46, y0 + 1.15 + 1.0, 0), U.mat(Color(0.1, 0.12, 0.25), 0.3, 0.5))
+	# main engine bells under the SM (inside adapter)
+	for k in 4:
+		var a := TAU * k / 4.0
+		U.put(sm, U.lathe(PackedVector2Array([Vector2(0.08, y0 + 0.95), Vector2(0.18, y0 + 0.7)]), 24, 0.0, TAU, true), dark).position = Vector3(sin(a) * 0.5, 0, cos(a) * 0.5)
+	# orbital module shell above the capsule (orbit.gd builds the interior version)
+	ship_om = Node3D.new(); ship_om.position.y = y_cap + 2.25; add_child(ship_om)
+	var prof := PackedVector2Array([Vector2(0.45, 0.0), Vector2(1.0, 0.3), Vector2(1.12, 1.0), Vector2(1.1, 1.9), Vector2(0.85, 2.5), Vector2(0.45, 2.75)])
+	var outer := PackedVector2Array(); for p in prof: outer.append(p + Vector2(0.08, 0))
+	U.put(ship_om, U.lathe(outer, 64), U.mat(Color(0.86, 0.86, 0.82), 0.7, 0.05, 1.5))
+	U.cyl(ship_om, 0.55, 0.45, 0.3, Vector3(0, -0.05, 0), alu, 48)   # tunnel ring to capsule hatch
+	U.cyl(ship_om, 0.42, 0.42, 0.25, Vector3(0, 2.85, 0), alu, 48)   # docking ring
 
 # ---------- fairing over the spacecraft ----------
 func _fairing() -> void:
