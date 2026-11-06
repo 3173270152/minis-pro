@@ -3,6 +3,10 @@ class_name U
 extends RefCounted
 
 static var _cache := {}
+static var font: Font = null
+static func cjk() -> Font:
+	if font == null: font = load("res://fonts/qh_cjk.ttf")
+	return font
 
 # ---------- materials ----------
 static func noise_tex(freq: float, normal := false, seed := 1, size := 512, octaves := 5, bump := 2.0) -> NoiseTexture2D:
@@ -158,7 +162,7 @@ static func bell_prof(rt: float, re: float, L: float, y0: float, n := 14) -> Pac
 	return p
 
 static func label(parent: Node, text: String, pos: Vector3, size := 0.5, col := Color.BLACK, rot := Vector3.ZERO, px := 128) -> Label3D:
-	var l := Label3D.new(); l.text = text; l.font_size = px; l.pixel_size = size / px; l.modulate = col
+	var l := Label3D.new(); l.font = cjk(); l.text = text; l.font_size = px; l.pixel_size = size / px; l.modulate = col
 	l.outline_size = 0; l.position = pos; l.rotation = rot; l.double_sided = false
 	l.shaded = true; l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
 	parent.add_child(l); return l
@@ -216,3 +220,15 @@ static func hose(parent: Node, pts: PackedVector3Array, r: float, m: Material, s
 ## orient a node in its PARENT's local space so -Z looks at target (positions are local, unlike Node3D.look_at)
 static func aim(n: Node3D, pos: Vector3, target: Vector3, up := Vector3.UP) -> void:
 	n.transform = Transform3D(Basis.looking_at(target - pos, up), pos)
+
+static var _puff: ImageTexture
+## soft round smoke puff (billboards)
+static func puff_tex() -> ImageTexture:
+	if _puff: return _puff
+	var img := Image.create(96, 96, false, Image.FORMAT_RGBA8); var nz := FastNoiseLite.new(); nz.frequency = 0.08
+	for y in 96:
+		for x in 96:
+			var d := Vector2(x - 47.5, y - 47.5).length() / 48.0
+			var a := clampf(1.0 - d, 0.0, 1.0); a = a * a * (0.65 + 0.35 * (nz.get_noise_2d(x, y) * 0.5 + 0.5))
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	_puff = ImageTexture.create_from_image(img); return _puff

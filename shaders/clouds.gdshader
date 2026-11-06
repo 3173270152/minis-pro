@@ -17,6 +17,6 @@ void fragment(){
 	float ndl = dot(normalize(wn), normalize(sun_dir));
 	float lit = smoothstep(-0.1, 0.3, ndl);
 	vec3 warm = mix(vec3(1.0, 0.6, 0.4), vec3(1.0), smoothstep(0.0, 0.3, ndl));
-	ALBEDO = vec3(1.0) * warm * (0.08 + 1.1 * lit);
+	ALBEDO = vec3(1.0) * warm * (0.05 + 0.7 * lit);
 	ALPHA = clamp(a * 1.15, 0.0, 1.0) * fade;
 }

@@ -6,8 +6,8 @@ extends Node
 signal changed(id: String)
 signal caution(level: String, msg: String)
 
-const CELL_SW := Vector2(0.05, 0.078)
-const CELL_CB := Vector2(0.036, 0.046)
+const CELL_SW := Vector2(0.044, 0.07)
+const CELL_CB := Vector2(0.032, 0.042)
 
 var SW := {}            # id -> def dict
 var SWL: Array = []     # defs available on this vehicle
@@ -347,7 +347,7 @@ var _m_collar: StandardMaterial3D
 func _mats() -> void:
 	_m_lever = U.mat(Color(0.86, 0.87, 0.88), 0.18, 1.0)
 	_m_nut = U.mat(Color(0.62, 0.63, 0.65), 0.3, 0.9)
-	_m_guard = U.mat(Color(0.85, 0.2, 0.1, 0.42), 0.15, 0.0); _m_guard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_m_guard = U.mat(Color(0.9, 0.15, 0.08, 0.38), 0.1, 0.0); _m_guard.cull_mode = BaseMaterial3D.CULL_DISABLED; _m_guard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_m_cb = U.mat(Color(0.06, 0.06, 0.07), 0.45, 0.2)
 	_m_collar = U.mat(Color(0.95, 0.95, 0.93), 0.5, 0.0)
 
@@ -431,84 +431,102 @@ func _bake_later(vp: SubViewport, pm: StandardMaterial3D) -> void:
 	vp.queue_free()
 
 func _lbl(vp: SubViewport, t: String, at: Vector2, size: int, col: Color, center := false, w := 0.0) -> Label:
-	var l := Label.new(); l.text = t; l.position = at; l.add_theme_font_size_override("font_size", size); l.add_theme_color_override("font_color", col)
+	var l := Label.new(); l.text = t; l.position = at; l.add_theme_font_override("font", U.cjk()); l.add_theme_font_size_override("font_size", size); l.add_theme_color_override("font_color", col)
 	if center: l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.size = Vector2(w, size * 1.4)
 	vp.add_child(l); return l
 
+## Soyuz/Shenzhou-style hardware: square backlit latching buttons (cap lights when ON), clear-red hinged covers on guarded
+## items, push-pull breakers on the side panels. Each panel draws its hardware with a few MultiMeshes (one draw call per type).
+func _mm(parent: Node3D, mesh: Mesh, mat: Material, n: int, colors := false) -> MultiMesh:
+	var mm := MultiMesh.new(); mm.transform_format = MultiMesh.TRANSFORM_3D; mm.use_colors = colors; mm.mesh = mesh; mm.instance_count = n
+	var mi := MultiMeshInstance3D.new(); mi.multimesh = mm; mi.material_override = mat; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi); return mm
+
+func _hw(P: Dictionary) -> void:
+	var g: Node3D = P.node
+	var ncap := 0; var ngrd := 0; var ncb := 0
+	for id in P.ids:
+		var k := kind_of(id)
+		if k == "c": ncb += 1
+		else: ncap += 1
+		if k == "g" or k == "gp": ngrd += 1
+	if _m_cap == null:
+		_m_cap = StandardMaterial3D.new(); _m_cap.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; _m_cap.vertex_color_use_as_albedo = true
+		_m_bez = U.mat(Color(0.1, 0.1, 0.11), 0.5, 0.4)
+	if ncap > 0:
+		P.mm_bez = _mm(g, U.rbox_mesh(Vector3(0.04, 0.04, 0.008), 0.004, 2), _m_bez, ncap)
+		P.mm_cap = _mm(g, U.rbox_mesh(Vector3(0.031, 0.031, 0.012), 0.004, 2), _m_cap, ncap, true)
+	if ngrd > 0:
+		var gm := BoxMesh.new(); gm.size = Vector3(0.044, 0.044, 0.026)
+		P.mm_grd = _mm(g, gm, _m_guard, ngrd)
+	if ncb > 0:
+		var kn := CylinderMesh.new(); kn.top_radius = 0.0085; kn.bottom_radius = 0.0085; kn.height = 0.012; kn.radial_segments = 12
+		var co := CylinderMesh.new(); co.top_radius = 0.0089; co.bottom_radius = 0.0089; co.height = 0.006; co.radial_segments = 12
+		P.mm_cb = _mm(g, kn, _m_cb, ncb); P.mm_col = _mm(g, co, _m_collar, ncb)
+
+var _m_cap: StandardMaterial3D
+var _m_bez: StandardMaterial3D
+
 func _build_cell(g: Node3D, vp: SubViewport, P: Dictionary, id: String, pos: Vector2, cell: Vector2) -> void:
+	if not P.has("hw"): P.hw = true; P.ic = 0; P.ig = 0; P.ib = 0; _hw(P)
 	var k := kind_of(id); var d := def_of(id)
 	var c := {"id": id, "kind": k, "pos": pos, "panel": P, "open": false, "open_t": 0.0, "press": 0.0}
 	var px := Vector2((pos.x + P.W * 0.5) * 2400, (P.H * 0.5 - pos.y) * 2400)
 	var cw := cell.x * 2400
-	# engraved legend above and below
 	if k == "c":
 		_lbl(vp, String(d.en).substr(0, 10), px + Vector2(-cw * 0.5, -cell.y * 2400 * 0.5 + 4), 15, Color(0.92, 0.92, 0.9), true, cw)
 		_lbl(vp, String(d.cn).substr(0, 6) + ("·备" if id.begins_with("cb2") else ""), px + Vector2(-cw * 0.5, cell.y * 2400 * 0.18), 14, Color(0.82, 0.84, 0.86), true, cw)
+		c.ib = P.ib; P.ib += 1
 	else:
 		_lbl(vp, String(d.en).substr(0, 12), px + Vector2(-cw * 0.5, -cell.y * 2400 * 0.5 + 2), 17, Color(0.95, 0.95, 0.93), true, cw)
 		_lbl(vp, d.cn, px + Vector2(-cw * 0.5, cell.y * 2400 * 0.26), 18, Color(0.86, 0.88, 0.9), true, cw)
-		if k == "t" or k == "g":
-			var valve: bool = CD.VERB_X.has(id) and CD.VERB_X[id][0] == "打开"
-			_lbl(vp, ("OPEN" if valve else ("ARM" if k == "g" else "ON")), px + Vector2(cw * 0.18, -cell.y * 2400 * 0.24), 12, Color(0.65, 0.68, 0.72))
-			_lbl(vp, ("CLOSE" if valve else ("SAFE" if k == "g" else "OFF")), px + Vector2(cw * 0.18, cell.y * 2400 * 0.08), 12, Color(0.65, 0.68, 0.72))
-	var n := Node3D.new(); n.position = Vector3(pos.x, pos.y - 0.004, 0); g.add_child(n); c.node = n
-	match k:
-		"c":
-			var knob := U.cyl(n, 0.0085, 0.0085, 0.012, Vector3(0, 0, 0.006), _m_cb, 12, Vector3(PI * 0.5, 0, 0))
-			var col := U.cyl(n, 0.0088, 0.0088, 0.005, Vector3(0, 0, 0.002), _m_collar, 12, Vector3(PI * 0.5, 0, 0))
-			c.knob = knob; c.collar = col
-		"t", "g":
-			U.cyl(n, 0.0105, 0.0105, 0.006, Vector3(0, 0, 0.003), _m_nut, 6, Vector3(PI * 0.5, 0, 0))
-			var piv := Node3D.new(); piv.position.z = 0.006; n.add_child(piv)
-			U.cyl(piv, 0.0035, 0.0055, 0.03, Vector3(0, 0, 0.015), _m_lever, 10, Vector3(PI * 0.5, 0, 0))
-			U.sphere(piv, 0.0045, Vector3(0, 0, 0.031), _m_lever, 10)
-			c.pivot = piv; c.ang = 0.6; c.tgt = 0.6
-			var tb := MeshInstance3D.new(); var tq := QuadMesh.new(); tq.size = Vector2(0.009, 0.012); tb.mesh = tq; tb.position = Vector3(-0.019, 0.012, 0.0015)
-			tb.material_override = U.emissive(Color(0.02, 0.02, 0.02), 1.0); n.add_child(tb); c.talk = tb
-		"p", "gp":
-			var b := U.rbox(n, Vector3(0.03, 0.03, 0.012), 0.004, Vector3(0, 0, 0.006), U.emissive(Color(0.5, 0.5, 0.5), 0.6))
-			c.btn = b
-	if k == "g" or k == "gp":
-		var gp := Node3D.new(); gp.position = Vector3(0, 0.022, 0.008); n.add_child(gp)
-		U.box(gp, Vector3(0.03, 0.003, 0.036), Vector3(0, -0.02, 0.018), _m_guard)
-		U.box(gp, Vector3(0.003, 0.034, 0.036), Vector3(-0.015, -0.004, 0.018), _m_guard)
-		U.box(gp, Vector3(0.003, 0.034, 0.036), Vector3(0.015, -0.004, 0.018), _m_guard)
-		c.guard = gp
+		c.ic = P.ic; P.ic += 1
+		P.mm_bez.set_instance_transform(c.ic, Transform3D(Basis(), Vector3(pos.x, pos.y - 0.004, 0.004)))
+		if k == "g" or k == "gp": c.ig = P.ig; P.ig += 1
 	var hit := StaticBody3D.new(); hit.collision_layer = 1 << 10; hit.collision_mask = 0
-	var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(cell.x * 0.95, cell.y * 0.95, 0.05); cs.shape = bs; cs.position.z = 0.02
-	hit.add_child(cs); n.add_child(hit); hit.set_meta("ctl", id)
+	var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(cell.x * 0.98, cell.y * 0.98, 0.06); cs.shape = bs
+	hit.position = Vector3(pos.x, pos.y - 0.004, 0.03); hit.add_child(cs); g.add_child(hit); hit.set_meta("ctl", id)
 	cells[id] = c
 	_pose(c, true)
 
 func _pose(c: Dictionary, snap: bool, anim_only := false) -> void:
-	var on: bool = S.get(c.id, false)
-	match c.kind:
-		"c":
-			c.knob.position.z = 0.006 if on else 0.014
-			c.collar.visible = not on
-		"t", "g":
-			c.tgt = -0.6 if on else 0.6
-			if snap: c.ang = c.tgt
-			c.pivot.rotation.x = c.ang
-	if anim_only: return
-	if c.has("guard"): c.guard.rotation.x = -1.9 if c.open else 0.0
+	var P: Dictionary = c.panel; var on: bool = S.get(c.id, false); var p: Vector2 = c.pos
+	if c.kind == "c":
+		var out := not on
+		P.mm_cb.set_instance_transform(c.ib, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(p.x, p.y - 0.004, 0.014 if out else 0.006)))
+		P.mm_col.set_instance_transform(c.ib, Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(Vector3.ONE if out else Vector3.ZERO), Vector3(p.x, p.y - 0.004, 0.004)))
+		return
+	var dn: bool = c.press > _time or ((c.kind == "t" or c.kind == "g") and on)   # latched buttons sit slightly lower
+	P.mm_cap.set_instance_transform(c.ic, Transform3D(Basis(), Vector3(p.x, p.y - 0.004, 0.008 if dn else 0.012)))
+	if c.has("ig"):
+		var b := Basis(Vector3.RIGHT, -1.9 if c.open else 0.0)
+		var hinge := Vector3(p.x, p.y - 0.004 + 0.022, 0.006)
+		P.mm_grd.set_instance_transform(c.ig, Transform3D(b, hinge + b * Vector3(0, -0.022, 0.013)))
+	_color(c)
 
-func _refresh_visuals() -> void:
+func _color(c: Dictionary) -> void:
+	if c.kind == "c": return
+	var id: String = c.id; var on: bool = S.get(id, false)
 	var lit := (power() and pw("INTEG")) or lamp_until > _time
+	var k := 1.0 if lit else 0.45
+	var col := Color(0.13, 0.14, 0.15)
+	if c.kind == "t" or c.kind == "g":
+		if lamp_until > _time: col = Color(0.95, 0.95, 0.8)
+		elif on: col = (Color(0.2, 1.0, 0.42) * k) if pw(id) else (Color(0.9, 0.9, 0.86) * k * (0.6 + 0.4 * float(int(_time * 2.0) % 2)))
+		else: col = Color(0.16, 0.17, 0.18) if not lit else Color(0.24, 0.26, 0.27)
+	else:
+		var red: bool = id in ["ABORT", "REPR", "CHREL"]; var amb: bool = id in ["SEPSM", "DROGUE", "CHUTE", "GEAR", "SA"]
+		col = Color(0.5, 0.52, 0.55) * k
+		if red: col = Color(0.85, 0.08, 0.05) * k
+		elif amb: col = Color(0.9, 0.55, 0.08) * k
+		if step_push_done(id) and lit: col = Color(0.2, 1.0, 0.42)
+		if c.press > _time: col = col.lightened(0.4)
+	c.panel.mm_cap.set_instance_color(c.ic, col)
+
+var _vis_t := 0.0
+func _refresh_visuals() -> void:
 	var pnl := 0.6 if pw("PNL") else 0.0
 	for P in panels: P.plate_mat.emission = Color(pnl, pnl * 0.93, pnl * 0.82)
-	for id in cells:
-		var c: Dictionary = cells[id]
-		if c.has("talk"):
-			var col := Color(0.02, 0.02, 0.02)
-			if S.get(id, false): col = (Color(0.15, 1.6, 0.45) if lit else Color(0.05, 0.3, 0.1)) if pw(id) else Color(0.9, 0.9, 0.9) * (1.0 if lit else 0.3)
-			c.talk.material_override.albedo_color = col; c.talk.material_override.emission = col
-		if c.has("btn"):
-			var red: bool = id in ["ABORT", "REPR", "CHREL"]; var amb: bool = id in ["SEPSM", "DROGUE", "CHUTE", "GEAR", "SA"]
-			var k := 1.6 if lit else 0.35
-			var col := Color(0.55, 0.58, 0.6) * k
-			if red: col = Color(0.75, 0.06, 0.04) * k
-			elif amb: col = Color(0.8, 0.5, 0.08) * k
-			if step_push_done(id) and lit: col = Color(0.25, 1.4, 0.55) * k
-			var m: StandardMaterial3D = c.btn.material_override; m.albedo_color = col; m.emission = col
-			c.btn.position.z = 0.002 if c.press > _time else 0.006
+	_vis_t += 1.0
+	if int(_vis_t) % 6 != 0: return
+	for id in cells: _pose(cells[id], false)

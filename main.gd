@@ -52,6 +52,27 @@ var pinch0 := 0.0
 var shot := ""
 var view := ""
 var frames := 0
+var cfg := {"rocket": "qihang", "mode": "astronaut", "dis": "off", "skip_walk": false}
+var phase := "seat"          # crew / seat / ascent / orbit / rdv / docked / eva / deorbit / entry / landed / abort / spectator
+var spec_track := true
+var modules: Array = []       # feature modules: each has setup(game) and tick(dt); see scripts/README_modules.md
+signal phase_changed(p: String)
+## feature modules loaded if present (each file owned by one workstream)
+const MODULE_FILES := ["res://scripts/vfx.gd", "res://scripts/engine_audio.gd", "res://scripts/mfd.gd", "res://scripts/crewday.gd", "res://scripts/orbit.gd", "res://scripts/entry.gd", "res://scripts/spectator.gd", "res://scripts/disaster.gd"]
+
+func set_phase(p: String) -> void:
+	if phase == p: return
+	phase = p; print("[phase] ", p); phase_changed.emit(p)
+
+func _load_modules() -> void:
+	for f in MODULE_FILES:
+		if ResourceLoader.exists(f):
+			var sc = load(f)
+			if sc == null or not sc.can_instantiate(): push_error("module failed to load: " + f); continue
+			var m = sc.new()
+			if m is Node: add_child(m)
+			modules.append(m)
+			if m.has_method("setup"): m.setup(self)
 
 const VIEWS := {
 	"pad": [Vector3(48, 10, 95), Vector3(-4, 34, 0)], "wide": [Vector3(260, 30, 330), Vector3(0, 40, 0)],
@@ -59,67 +80,105 @@ const VIEWS := {
 	"tower": [Vector3(30, 50, -30), Vector3(-13, 45, 0)], "capx": [Vector3(5, 58, 5), Vector3(0, 56.5, 0)],
 }
 
+var loading: CanvasLayer
+var load_label: Label
+var ready_done := false
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="): shot = a.substr(7)
 		if a.begins_with("--view="): view = a.substr(7)
+	# loading screen first so the device leaves the splash immediately; the heavy build runs over the next frames
+	var debug := shot != "" or view != ""
+	for a in OS.get_cmdline_user_args(): if a.begins_with("--flight=") or a.begins_with("--T=") or a == "--nomenu": debug = true
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--rocket="): cfg.rocket = a.substr(9)
+		if a.begins_with("--mode="): cfg.mode = a.substr(7)
+		if a.begins_with("--dis="): cfg.dis = a.substr(6)
+	if not debug:
+		var menu := Menu.new(); add_child(menu)
+		var c: Dictionary = await menu.start
+		for k in c: cfg[k] = c[k]
+	loading = CanvasLayer.new(); loading.layer = 50; add_child(loading)
+	var bg := ColorRect.new(); bg.color = Color(0.02, 0.03, 0.06); bg.set_anchors_preset(Control.PRESET_FULL_RECT); loading.add_child(bg)
+	var t := Label.new(); t.text = "启航号"; t.add_theme_font_size_override("font_size", 64); t.set_anchors_preset(Control.PRESET_CENTER); t.position = Vector2(-110, -90); loading.add_child(t)
+	load_label = Label.new(); load_label.text = "正在加载…"; load_label.add_theme_font_size_override("font_size", 22); load_label.set_anchors_preset(Control.PRESET_CENTER); load_label.position = Vector2(-160, 10); load_label.size = Vector2(320, 40)
+	load_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; loading.add_child(load_label)
+	_build.call_deferred()
+
+func _step(msg: String) -> void:
+	load_label.text = msg; print("[load] ", msg)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+func _build() -> void:
+	_quality()
+	await _step("正在生成戈壁地形与天空…")
 	site = Node3D.new(); site.name = "Site"; add_child(site)
 	world = World.new(); site.add_child(world)
-	pad = Pad.new(); site.add_child(pad)
+	await _step("正在建造发射场与发射塔…")
+	rocket = Rocket.new(cfg.rocket)
+	pad = Pad.new()
+	await _step("正在加载地球（NASA 卫星影像）…")
 	earth = Earth.new(); site.add_child(earth)
-	rocket = Rocket.new(); rocket.position = Vector3(0, Pad.DECK, 0); add_child(rocket)
-	capsule = Capsule.new(); capsule.position.y = Rocket.Y_CAPSULE; rocket.add_child(capsule)
-	console = Console.new("qihang"); add_child(console)
+	await _step("正在组装启航号运载火箭…")
+	rocket.position = Vector3(0, Pad.DECK, 0); add_child(rocket)
+	pad.veh_top = rocket.top; pad.veh_cap = rocket.y_cap; pad.veh_hatch_x = rocket.cap_mount.position.x - rocket.r_hatch
+	site.add_child(pad)
+	await _step("正在布置返回舱座舱…")
+	capsule = Capsule.new(); capsule.variant = rocket.cab; rocket.cap_mount.add_child(capsule)
+	await _step("正在安装控制台（约 190 个开关与断路器）…")
+	console = Console.new(cfg.rocket if cfg.rocket != "cz2f" else "qihang"); add_child(console)
 	var L: Array = console.panel_list(); var sf: Array = capsule.surfaces()
 	console.flow([sf[0]], ["abt", "cw", "dok", "avi", "com", "prp", "lts", "seq"].map(func(k): return console.find_panel(L, k)))
 	console.flow([sf[1]], ["eps", "cba", "cbc"].map(func(k): return console.find_panel(L, k)))
 	console.flow([sf[2]], ["ecs", "cbb"].map(func(k): return console.find_panel(L, k)))
 	console.caution.connect(_on_caution)
-	sfx = Sfx.new(); add_child(sfx); sfx.subtitle.connect(func(w, t, d): hud.say(w, t, d))
+	if OS.get_cmdline_user_args().has("--fit"): print("[fit] bad corners: ", capsule.check_fit(console))
+	await _step("正在准备语音与音效…")
+	sfx = Sfx.new(); add_child(sfx); sfx.subtitle.connect(func(w, tx, d): hud.say(w, tx, d))
 	hud = Hud.new(); add_child(hud); hud.button.connect(_on_button)
-	cam = Camera3D.new(); cam.fov = 74; cam.near = 0.03; cam.far = 2.0e5; add_child(cam)
-	_build_traj(); _build_plumes()
+	cam = Camera3D.new(); cam.fov = 74; cam.near = 0.03; cam.far = 2.0e5; add_child(cam); cam.make_current()
 	for a in OS.get_cmdline_user_args():
 		if a == "--powered": console.auto_upto("int")
-		if a.begins_with("--flight="): T = float(a.substr(9)) + 2.0; lifted = true; running = true; poll_done = true; console.auto_upto("int")
-		if a.begins_with("--T="): T = float(a.substr(4)); running = true; poll_done = true; crew_go = true; console.auto_upto("int"); console.hatch_closed = true
+		if a.begins_with("--flight="):
+			T = 2.0; lifted = true; running = true; poll_done = true; console.auto_upto("int"); phase = "ascent"; ff = true
+			var tgt := float(a.substr(9))
+			while flight == null or flight.t < tgt: _flight(0.05)
+			ff = false
+		if a.begins_with("--T="): T = float(a.substr(4)); running = true; poll_done = true; crew_go = true; console.auto_upto("int")
 	console.hatch_closed = true
+	if cfg.mode == "spectator":
+		console.auto_upto("int"); poll_done = true; crew_go = true; running = true; T = -100.0; set_phase("spectator"); hud.proc_box.visible = false
 	if view == "chase": cam_mode = "chase"; yaw = 0.6; pitch = 0.1
 	elif view != "" and not view.begins_with("cabin"):
 		hud.visible = false; var v: Array = VIEWS.get(view, VIEWS["pad"]); cam_mode = "fixed"; cam.position = v[0]; cam.look_at(v[1])
 		if view == "capx": rocket.fairing.visible = false; rocket.les.visible = false
-	else:
+	elif cfg.mode != "spectator":
 		hud.objective.text = "任务 1 / 3：按飞行程序手册给飞船加电（不限顺序，约 190 个开关全部可操作）。不熟悉可以点「开始指导」或「队友执行」"
 		sfx.line("hatch", 1.0); sfx.line("seat1", 3.0)
 	_update_sun()
+	_load_modules()
+	await _step("准备就绪")
+	loading.queue_free(); ready_done = true
+
+## phones: keep the look but drop the most expensive effects and render 3D below native resolution with FSR upscaling
+func _quality() -> void:
+	var q: String = cfg.get("q", "balanced")
+	Engine.max_fps = 120
+	if q == "quality" and not OS.has_feature("mobile"): return
+	if not OS.has_feature("mobile") and q == "balanced": return
+	RenderingServer.directional_shadow_atlas_set_size(4096, true)
+	var vp := get_viewport()
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2 if RenderingServer.get_current_rendering_method() == "forward_plus" else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = {"fast": 0.5, "balanced": 0.67, "quality": 0.85}.get(q, 0.67)
+	if q == "fast":
+		RenderingServer.directional_shadow_atlas_set_size(2048, true)
+		get_viewport().positional_shadow_atlas_size = 1024
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
 
 # ================= trajectory (precomputed ascent profile modelled on a CZ-2F flight) =================
-const SECO := 584.0
-func _build_traj() -> void:
-	var x := 0.0; var prev_h := 0.0; var dt := 0.25; var t := 0.0
-	while t <= SECO + 1.0:
-		var u := clampf(t / SECO, 0.0, 1.0)
-		var h := 200000.0 * (1.0 - pow(1.0 - u, 2.2)) * pow(u, 0.9) * 1.04
-		var v := 7800.0 * pow(u, 1.45)
-		var vy := (h - prev_h) / dt if t > 0.0 else 0.0
-		var vx := sqrt(maxf(v * v - vy * vy, 0.0))
-		x += vx * dt; prev_h = h
-		traj.append([t, h, x, v, atan2(vx, maxf(vy, 0.001))])
-		t += dt
-
-func traj_at(t: float) -> Array:
-	var i := clampi(int(t / 0.25), 0, traj.size() - 2)
-	var a: Array = traj[i]; var b: Array = traj[i + 1]; var f := clampf((t - a[0]) / 0.25, 0.0, 1.0)
-	return [t, lerpf(a[1], b[1], f), lerpf(a[2], b[2], f), lerpf(a[3], b[3], f), lerpf(a[4], b[4], f)]
-
-## rocket position in the site frame, local up and flight-path pitch (curved Earth, downrange toward +X)
-func rocket_pose(t: float) -> Transform3D:
-	var s := traj_at(maxf(t, 0.0))
-	var phi: float = s[2] / Earth.R; var r: float = Earth.R + s[1]
-	var p := Vector3(sin(phi) * r, cos(phi) * r - Earth.R + Pad.DECK, 0)
-	var ang: float = phi + (s[4] if t > 8.0 else s[4] * smoothstep(0.0, 8.0, t) * 0.0)
-	return Transform3D(Basis(Vector3(0, 0, 1), -ang), p)
-
 # ================= plumes & smoke =================
 func _build_plumes() -> void:
 	var sh := load("res://shaders/plume.gdshader")
@@ -149,6 +208,7 @@ func _puff_tex() -> ImageTexture:
 
 # ================= input =================
 func _unhandled_input(e: InputEvent) -> void:
+	if not ready_done or phase == "crew" or (cam_mode == "module" and cfg.mode != "spectator"): return
 	if e is InputEventScreenTouch:
 		if e.pressed: touches[e.index] = e.position; moved = 0.0
 		else:
@@ -196,6 +256,9 @@ func _click(screen: Vector2) -> void:
 	var id := _pick(screen)
 	if id == "": return
 	sfx.click()
+	if id.begins_with("MFD"):
+		if has_meta("mfd"): get_meta("mfd").cycle(int(id.substr(3)))
+		return
 	var msg := console.operate(id)
 	if msg != "": hud.say("系统", msg, 2.5)
 	if id == "ABORT": _abort_pressed()
@@ -205,7 +268,9 @@ func _on_button(n: String) -> void:
 		"go":
 			if wait_go: wait_go = false; crew_go = true; sfx.line("gome", 0.0, true); _later(3.5, func(): sfx.line("resume"); running = true; hud.objective.text = "倒计时：躺稳，看着面板")
 		"zoom": zoom = 1.0 if zoom > 1.2 else 2.5
-		"view": cam_mode = "chase" if cam_mode == "seat" else "seat"
+		"view":
+			if cfg.mode == "spectator": spec_track = not spec_track; hud.say("系统", "自动跟踪火箭：" + ("开" if spec_track else "关"), 1.5)
+			else: cam_mode = "chase" if cam_mode == "seat" else "seat"
 		"skip":
 			if not lifted:
 				console.auto_upto("int"); poll_done = true; wait_go = false; crew_go = true; running = true; T = maxf(T, -12.0); hud.say("系统", "已跳到 T−12 秒", 2.0)
@@ -240,6 +305,8 @@ func _on_caution(level: String, msg: String) -> void:
 	hud.say("主告警" if level == "W" else ("注意" if level == "C" else "系统"), msg, 4.0)
 
 func _abort_pressed() -> void:
+	for m in modules:
+		if m.has_method("abort_request") and m.abort_request(): return
 	if lifted and stage < 2 and console.esc_hw():
 		hud.say("系统", "逃逸！逃逸塔点火", 4.0); sfx.line("xabort", 0.0, true); _abort()
 	elif not lifted and T > -120.0 and running:
@@ -254,8 +321,11 @@ func _later(sec: float, cb: Callable) -> void: _timers.append([sec, cb])
 
 # ================= main loop =================
 func _process(dt: float) -> void:
+	if not ready_done: return
 	frames += 1
-	if shot != "" and frames == 70: get_viewport().get_texture().get_image().save_png(shot); get_tree().quit()
+	for m in modules: m.tick(dt)
+	_place_earth.call_deferred()
+	if shot != "" and frames == 50: get_viewport().get_texture().get_image().save_png(shot); get_tree().quit()
 	for i in range(_timers.size() - 1, -1, -1):
 		_timers[i][0] -= dt
 		if _timers[i][0] <= 0.0: var cb: Callable = _timers[i][1]; _timers.remove_at(i); cb.call()
@@ -264,7 +334,7 @@ func _process(dt: float) -> void:
 	console.on_ground_power = not lifted
 	console.in_space = alt > 100000.0
 	console.tick(dt)
-	sfx.comm_ok = console.comm_link(not lifted or T < 420.0, false)
+	sfx.comm_ok = console.comm_link(not lifted or T < 420.0 or phase in ["entry", "landed", "abort"], phase in ["rdv", "docked"]) and not bool(get_meta("comm_loss", false))
 	sfx.set_alarm(console.alarm_on and console.cws_ok())
 	_count(dt)
 	_flight(dt)
@@ -300,72 +370,91 @@ func _count(dt: float) -> void:
 	if T > -15.0 and not console.internal_power():
 		running = false; held = "int"; sfx.line("c_holdpwr", 0.0, true); ph = _proc_index("int"); return
 	var ev := {-59.9: "term", -45.0: "c_zd", -40.0: "power", -30.0: "les", -25.0: "umb", -20.0: "go", -16.0: "deluge"}
-	for k in ev: if T0 < k and T >= k: sfx.line(ev[k]); if ev[k] == "c_zd": ph = _proc_index("int")
+	for k in ev: if T0 < k and T >= k and cfg.mode != "spectator": sfx.line(ev[k]); if ev[k] == "c_zd": ph = _proc_index("int")
 	for n in range(10, 0, -1):
-		if T0 < -n and T >= -n: sfx.line("n%d" % n, 0.0, true)
+		if T0 < -n and T >= -n and cfg.mode != "spectator": sfx.line("n%d" % n, 0.0, true)
 	if T0 < -16.0 and T >= -16.0: pass
-	if T >= -3.0 and throttle == 0.0: throttle = 0.4; smoke.emitting = true
-	if T0 < 0.0 and T >= 0.0: sfx.line("ign", 0.0, true)
-	if T >= 2.0: lifted = true; sfx.line("lift", 0.3, true); hud.objective.text = "起飞！"
+	if T >= -3.0 and throttle == 0.0: throttle = 0.4
+	if T0 < 0.0 and T >= 0.0 and cfg.mode != "spectator": sfx.line("ign", 0.0, true)
+	if T >= 2.0:
+		lifted = true
+		if cfg.mode == "spectator": phase = "ascent"
+		else: set_phase("ascent"); sfx.line("lift", 0.3, true); hud.objective.text = "起飞！"
 
 func _proc_index(k: String) -> int:
 	for i in CD.PROC.size(): if CD.PROC[i].k == k: return i
 	return 0
+
+var flight: Flight
+var ff := false          # fast-forwarding (debug --flight=): no voice
+var jolt := 0.0
+var _said_t := {}
 
 func _flight(dt: float) -> void:
 	if not lifted:
 		throttle = minf(throttle + dt * 0.25, 1.0) if throttle > 0.0 else 0.0
 		alt = 0.0; vel = 0.0; gload = 1.0
 		shake = throttle * 0.004
-		_plumes_update(dt)
-		sfx.set_engine(throttle * 0.85, cam_mode == "seat")
+		if cfg.mode != "spectator": sfx.set_engine(throttle * 0.85, cam_mode == "seat")
 		return
-	if stage == 9: return
+	if stage == 9 or (phase != "ascent" and phase != "spectator"): return
 	T += dt
-	var t := T - 2.0
-	var pose := rocket_pose(t)
-	# floating origin: put the rocket's flight position at the origin by moving the site underneath
-	site.position = -pose.origin + Vector3(0, Pad.DECK, 0)
-	rocket.transform = Transform3D(pose.basis, Vector3(0, Pad.DECK, 0))
-	var s := traj_at(t); var s2 := traj_at(t + 0.5)
-	alt = s[1]; vel = s[3]; gload = clampf((s2[3] - s[3]) / 0.5 / 9.81 + cos(s[4]), 0.0, 6.0)
-	var rho := 1.225 * exp(-alt / 8500.0); qdyn = 0.5 * rho * vel * vel
-	# staging
-	var evs := [[8.0, "tower"], [20.0, "feel"], [62.0, "mach"], [75.0, "maxq"], [120.0, "lesj"], [140.0, "bsep"], [158.0, "meco"], [160.0, "sep"], [162.0, "ses"], [200.0, "fair"], [300.0, "nom"], [SECO, "seco"], [SECO + 6.0, "shipsep"]]
-	for e in evs:
-		if t - dt < e[0] and t >= e[0]: _event(e[1])
-	throttle = 1.0 if stage < 3 else 0.0
-	if stage == 0 and t > 155.0: throttle = 0.6
-	shake = (0.0012 + 0.006 * clampf(qdyn / 35000.0, 0.0, 1.0) + (0.004 if t < 12.0 else 0.0)) * throttle
-	if stage == 3: shake = 0.0
-	_plumes_update(dt)
-	sfx.set_engine(throttle, cam_mode == "seat", clampf(qdyn / 35000.0, 0.0, 1.0))
+	if flight == null: flight = Flight.new(rocket.kind); set_meta("flight", flight)
+	flight.engine_out = int(get_meta("engine_out", 0))
+	flight.step(dt)
+	var st: Dictionary = flight.state
+	var t: float = flight.t
+	# floating origin: the rocket stays at (0, DECK, 0); the site moves underneath
+	var p: Vector3 = st.pos
+	site.position = -p
+	var d: Vector3 = st.dir
+	rocket.transform = Transform3D(Basis(Vector3(0, 0, 1), -atan2(d.x, d.y)), Vector3(0, Pad.DECK, 0))
+	alt = st.alt; vel = st.speed; gload = st.g; qdyn = st.q; set_meta("mach", st.mach)
+	for e in flight.events: _event(e)
+	for k in [[8.0, "tower"], [20.0, "feel"], [300.0, "nom"]]:
+		if t >= k[0] and not _said_t.has(k[1]): _said_t[k[1]] = true; _event(k[1])
+	if flight.phase == 4 and not _said_t.has("shipsep") and not _said_t.has("seco_t"): _said_t["seco_t"] = t
+	if _said_t.has("seco_t") and t - float(_said_t["seco_t"]) > 6.0 and not _said_t.has("shipsep"): _said_t["shipsep"] = true; _event("shipsep")
+	throttle = 0.0 if flight.phase == 2 or flight.phase == 4 else (0.12 if flight._vern else 1.0)
+	jolt = maxf(0.0, jolt - dt * 1.5)
+	var buffet := clampf(qdyn / 35000.0, 0.0, 1.0)
+	shake = (0.0008 + 0.0015 * (st.thrust / 6.0e6) + 0.006 * buffet * buffet + (0.004 if t < 10.0 else 0.0)) * (1.0 if throttle > 0.0 else 0.2) + jolt * 0.02
+	if cfg.mode != "spectator": sfx.set_engine(throttle, cam_mode == "seat", buffet)
 	# world fades: terrain -> globe; sky -> black
 	var ef := smoothstep(12000.0, 45000.0, alt)
 	earth.set_fade(ef); world.terrain.visible = alt < 90000.0; pad.visible = alt < 30000.0
 	world.sky_mat.energy_multiplier = lerpf(1.0, 0.04, smoothstep(10000.0, 70000.0, alt))
 	world.env.fog_density = 0.000022 * (1.0 - smoothstep(2000.0, 20000.0, alt))
-	world.env.volumetric_fog_enabled = alt < 15000.0
-	# debris
-	for d in detached:
-		var n: Node3D = d[0]; d[1] += Vector3(0, -9.8, 0) * dt * 0.3
-		n.global_position += (d[1] as Vector3) * dt; n.rotate(d[2], dt * 0.4)
+	world.env.volumetric_fog_enabled = alt < 15000.0 and not OS.has_feature("mobile")
+	# debris falls in the site frame: gravity + drag
+	for dd in detached:
+		var n: Node3D = dd[0]
+		if not n.get_parent() == site: continue
+		var rho := 1.225 * exp(-n.position.y / 8400.0)
+		var vv: Vector3 = dd[1]; vv += Vector3(0, -9.8, 0) * dt - vv * minf(1.0, rho * vv.length() * 0.0004) * dt
+		dd[1] = vv; n.position += vv * dt; n.rotate(dd[2], dt * 0.5)
 	_update_sun()
 
 func _event(k: String) -> void:
-	sfx.line(k)
+	if cfg.mode != "spectator" and not ff: sfx.line(k)
 	match k:
-		"lesj": _detach(rocket.les, Vector3(-20, 60, 4))
+		"lesj": _detach(rocket.les, Vector3(-6, 40, 3)); jolt = 0.5
 		"bsep":
-			for b in rocket.boosters: _detach(b, (b.global_position - rocket.global_position).normalized() * 8.0 + Vector3(0, -15, 0))
-			stage = 1
-		"sep": _detach(rocket.stage1, Vector3(0, -30, 0)); stage = 2
-		"fair": _detach(rocket.fairing, Vector3(10, 0, 18)); _open_windows()
-		"shipsep": stage = 3; hud.objective.text = "入轨成功！船箭分离。欢迎来到太空。"
+			for b in rocket.boosters: _detach(b, (b.global_position - rocket.global_position).normalized() * 6.0 + Vector3(0, -4, 0))
+			stage = 1; jolt = 1.0
+		"meco": jolt = 0.6
+		"sep": _detach(rocket.stage1, Vector3(0, -12, 0)); stage = 2; jolt = 1.2
+		"fair": _detach(rocket.fairing, Vector3(4, 0, 10)); _open_windows(); jolt = 0.4
+		"seco": jolt = 0.4
+		"underspeed": hud.say("指挥大厅", "二级推进剂耗尽，入轨速度不足！", 5.0)
+		"shipsep": stage = 3; jolt = 0.5; hud.objective.text = "入轨成功！船箭分离。欢迎来到太空。"; set_phase("orbit")
 
-func _detach(n: Node3D, v: Vector3) -> void:
-	var gt := n.global_transform; n.get_parent().remove_child(n); add_child(n); n.global_transform = gt
-	detached.append([n, v, Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5).normalized()])
+## separated parts continue in the site frame with the vehicle's velocity plus a separation push
+func _detach(n: Node3D, push: Vector3) -> void:
+	if n == null or n.get_parent() == null: return
+	var gt := n.global_transform; n.get_parent().remove_child(n); site.add_child(n); n.global_transform = gt
+	var v0: Vector3 = flight.state.vel if flight else Vector3.ZERO
+	detached.append([n, v0 + rocket.global_transform.basis * push, Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5).normalized()])
 
 func _open_windows() -> void:
 	for c in capsule.get_children():
@@ -394,7 +483,7 @@ func _update_sun() -> void:
 	earth.set_sun(-d)
 
 func _camera(dt: float) -> void:
-	if cam_mode == "fixed": return
+	if cam_mode == "fixed" or cam_mode == "module": return
 	if view.begins_with("cabin"):
 		var parts := view.split(":")
 		if parts.size() > 2: yaw = float(parts[1]); pitch = float(parts[2])
@@ -411,10 +500,10 @@ func _camera(dt: float) -> void:
 		cam.global_position = tgt + off; cam.look_at(tgt, Vector3.UP)
 		fov = 55.0 / zoom
 	cam.fov = lerpf(cam.fov, fov, minf(1.0, dt * 8.0))
-	if earth.visible: earth.place(cam.global_position, site.global_position + Vector3(0, -Earth.R, 0))
 
 func _ui(dt: float) -> void:
 	hud.clock.text = Hud.fmt_t(T)
+	if frames % 20 == 0: hud.fps.text = "%d FPS" % Engine.get_frames_per_second()
 	var st := "倒计时" if running and not lifted else ("计划内暂停 · HOLD" if not lifted else "上升段")
 	if held == "lcc": st = "计数暂停：发射条件不满足"
 	elif held == "int": st = "计数暂停：器上未转电"
@@ -463,3 +552,7 @@ func _ui(dt: float) -> void:
 				if k == "g" and not console.cells[id].open: state += " · 先点开保护盖"
 			hud.tip.text = "%s · %s\n%s" % [d.cn, d.en, state]
 	hud.cross.visible = cam_mode == "seat"
+	if cfg.mode == "spectator": hud.proc_box.visible = false
+
+func _place_earth() -> void:
+	if earth and earth.visible: earth.place(cam.global_position, site.global_position + Vector3(0, -Earth.R, 0))

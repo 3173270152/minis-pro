@@ -4,6 +4,7 @@ config_version=5
 config/name="启航号"
 run/main_scene="res://main.tscn"
 config/icon="res://icon.png"
+run/max_fps=120
 config/features=PackedStringArray("4.4", "Forward Plus")
 
 [display]
@@ -28,6 +29,7 @@ anti_aliasing/quality/use_taa=false
 
 [physics]
 3d/physics_engine="Jolt Physics"
+common/physics_ticks_per_second=120
 
 [debug]
 gdscript/warnings/inference_on_variant=0
@@ -35,3 +37,7 @@ gdscript/warnings/unused_variable=0
 gdscript/warnings/unused_local_constant=0
 gdscript/warnings/narrowing_conversion=0
 gdscript/warnings/integer_division=0
+
+[gui]
+theme/custom_font="res://fonts/qh_cjk.ttf"
+theme/default_font_antialiasing=1

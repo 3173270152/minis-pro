@@ -4,9 +4,12 @@ class_name Pad
 extends Node3D
 
 const DECK := 8.0          # top of the mobile launch platform (rocket sits here)
-const TOWER_X := -13.5     # tower centre
+var TOWER_X := -13.5       # tower centre (moved out for wide vehicles)
 const TOWER_W := 10.0
-const TOWER_H := 86.0
+var veh_top := 65.2
+var veh_cap := 47.6
+var veh_hatch_x := -1.9     # x of the crew hatch surface
+var TOWER_H := 86.0
 var arm_y := 0.0
 var elevator: Node3D
 var arm: Node3D
@@ -25,7 +28,9 @@ func _ready() -> void:
 	red = U.mat(Color(0.66, 0.11, 0.08), 0.5, 0.35, 1.0)
 	grating = U.mat(Color(0.35, 0.36, 0.37), 0.6, 0.7, 2.0)
 	floor_bodies = Node3D.new(); add_child(floor_bodies)
-	arm_y = DECK + Rocket.Y_CAPSULE - 0.05
+	TOWER_H = maxf(86.0, veh_top + 16.0)
+	TOWER_X = minf(-13.5, veh_hatch_x - 6.6 - TOWER_W * 0.5)
+	arm_y = DECK + veh_cap - 0.05
 	_apron()
 	_trench()
 	_platform()
@@ -173,7 +178,7 @@ func _tower() -> void:
 func _arm() -> void:
 	# crew access arm from the tower to the fairing hatch, ending in the white room
 	arm = Node3D.new(); arm.name = "CrewArm"; arm.position = Vector3(TOWER_X + TOWER_W * 0.5, arm_y, 0); add_child(arm)
-	var L := -TOWER_X - TOWER_W * 0.5 - Rocket.R_FAIR - 2.6
+	var L := veh_hatch_x - 2.6 - (TOWER_X + TOWER_W * 0.5)
 	var wall := U.mat(Color(0.88, 0.88, 0.86), 0.55, 0.15, 1.0)
 	U.box(arm, Vector3(L, 0.2, 1.8), Vector3(L * 0.5, 0, 0), grating)
 	for s in [-1, 1]:

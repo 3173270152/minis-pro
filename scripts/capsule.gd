@@ -6,7 +6,7 @@ extends Node3D
 
 const H := 2.2
 const EYE := Vector3(0.36, 0.66, 0.0)           # player's eye in capsule space
-const PANEL_POS := Vector3(-0.30, 1.42, 0.0)    # main instrument panel centre
+const PANEL_POS := Vector3(-0.15, 1.25, 0.0)    # main instrument panel centre
 var seat_anchor: Node3D
 var panel_root: Node3D        # main panel frame: +Z faces the crew, +X to their right, +Y toward their heads
 var side_l: Node3D
@@ -15,6 +15,7 @@ var hatch: Node3D
 var lights: Array[Light3D] = []
 var crew: Array[Node3D] = []
 var screens: Array = []
+var variant := "shenzhou"   # shenzhou / apollo / dragon / shuttle
 
 var m_fab: ShaderMaterial
 var m_frame: StandardMaterial3D
@@ -34,12 +35,13 @@ func inner_r(y: float) -> float:
 	return 0.42
 
 func _ready() -> void:
-	m_fab = U.shader_mat("res://shaders/quilt.gdshader", {"nz": U.noise_tex(0.03, false, 61, 256, 4)})
+	var lin: Color = {"apollo": Color(0.74, 0.75, 0.7), "dragon": Color(0.93, 0.93, 0.92), "shuttle": Color(0.8, 0.78, 0.72)}.get(variant, Color(0.86, 0.8, 0.66))
+	m_fab = U.shader_mat("res://shaders/quilt.gdshader", {"nz": U.noise_tex(0.03, false, 61, 256, 4), "base": lin})
 	m_frame = U.mat(Color(0.36, 0.38, 0.4), 0.45, 0.6, 1.0)
 	m_dark = U.mat(Color(0.12, 0.13, 0.14), 0.55, 0.4, 0.8)
 	m_alu = U.mat(Color(0.75, 0.76, 0.78), 0.32, 0.85, 0.6)
 	m_suit = U.mat(Color(0.9, 0.9, 0.87), 0.85, 0.0, 1.5)
-	m_seat = U.mat(Color(0.28, 0.3, 0.32), 0.5, 0.3, 1.0)
+	m_seat = U.mat(Color(0.08, 0.08, 0.09) if variant == "dragon" else Color(0.28, 0.3, 0.32), 0.5, 0.3, 1.0)
 	m_cush = U.mat(Color(0.86, 0.85, 0.8), 0.95, 0.0, 2.5)
 	_shell()
 	_floor_and_frames()
@@ -151,19 +153,19 @@ func _main_panel() -> void:
 	U.aim(panel_root, PANEL_POS, PANEL_POS + (EYE - PANEL_POS).normalized(), Vector3(1, 0, 0))
 	panel_root.rotate_object_local(Vector3.UP, PI)   # +Z toward the crew
 	var hous := U.mat(Color(0.2, 0.22, 0.24), 0.75, 0.1, 1.0)
-	U.rbox(panel_root, Vector3(1.38, 0.84, 0.14), 0.03, Vector3(0, 0, -0.09), hous)
-	U.rbox(panel_root, Vector3(1.42, 0.05, 0.22), 0.02, Vector3(0, 0.44, -0.02), m_frame)   # glare shield
+	U.rbox(panel_root, Vector3(1.12, 0.72, 0.12), 0.03, Vector3(0, 0, -0.08), hous)
+	U.rbox(panel_root, Vector3(1.14, 0.04, 0.16), 0.015, Vector3(0, 0.37, -0.02), m_frame)   # glare shield
 	# three multifunction displays across the top
 	screens = []
 	for i in 3:
-		var sc := MeshInstance3D.new(); var q := QuadMesh.new(); q.size = Vector2(0.36, 0.225); sc.mesh = q; sc.position = Vector3((i - 1) * 0.43, 0.27, 0.004)
-		add_screen_bezel(panel_root, sc.position, Vector2(0.36, 0.225)); panel_root.add_child(sc); screens.append(sc)
+		var sc := MeshInstance3D.new(); var q := QuadMesh.new(); q.size = Vector2(0.3, 0.1875); sc.mesh = q; sc.position = Vector3((i - 1) * 0.35, 0.215, 0.004)
+		add_screen_bezel(panel_root, sc.position, Vector2(0.3, 0.1875)); panel_root.add_child(sc); screens.append(sc)
 	# support struts to the hull
-	for x in [-0.6, 0.6]:
-		var a := panel_root.to_global(Vector3(x, 0.25, -0.15)); var b := Vector3(a.x + 0.2, a.y + 0.35, a.z * 1.05)
+	for x in [-0.5, 0.5]:
+		var a := panel_root.to_global(Vector3(x, 0.25, -0.12)); var b := Vector3(a.x + 0.2, a.y + 0.35, a.z * 1.05)
 		U.beam(self, to_local(a), to_local(b), 0.02, m_alu)
 	# grab handles both ends
-	for x in [-0.72, 0.72]:
+	for x in [-0.58, 0.58]:
 		U.beam(panel_root, Vector3(x, -0.25, 0.0), Vector3(x, 0.25, 0.0), 0.012, m_alu)
 		U.beam(panel_root, Vector3(x * 0.95, -0.25, -0.05), Vector3(x, -0.25, 0.0), 0.012, m_alu)
 		U.beam(panel_root, Vector3(x * 0.95, 0.25, -0.05), Vector3(x, 0.25, 0.0), 0.012, m_alu)
@@ -175,18 +177,18 @@ func add_screen_bezel(parent: Node3D, pos: Vector3, sz: Vector2) -> void:
 
 ## console surfaces for the switch panels: {node, x, y, w, h}
 func surfaces() -> Array:
-	return [{"node": panel_root, "x": -0.67, "y": 0.11, "w": 1.34, "h": 0.5},
-		{"node": side_l, "x": -0.31, "y": 0.3, "w": 0.62, "h": 0.6},
-		{"node": side_r, "x": -0.31, "y": 0.3, "w": 0.62, "h": 0.6}]
+	return [{"node": panel_root, "x": -0.54, "y": 0.085, "w": 1.08, "h": 0.42},
+		{"node": side_l, "x": -0.28, "y": 0.29, "w": 0.56, "h": 0.58},
+		{"node": side_r, "x": -0.28, "y": 0.29, "w": 0.56, "h": 0.58}]
 
 func _side_panels() -> void:
 	# side consoles on the wall beside the outer seats, tilted toward the commander's eye
 	side_l = Node3D.new(); side_r = Node3D.new()
 	for k in 2:
 		var sp: Node3D = [side_l, side_r][k]; var s := -1.0 if k == 0 else 1.0
-		var p := Vector3(0.12, 1.0, s * 0.84)
+		var p := Vector3(0.05, 0.95, s * 0.68)
 		add_child(sp); U.aim(sp, p, EYE, Vector3(1, 0, 0)); sp.rotate_object_local(Vector3.UP, PI)
-		U.rbox(sp, Vector3(0.64, 0.62, 0.08), 0.02, Vector3(0, 0, -0.05), U.mat(Color(0.2, 0.22, 0.24), 0.75, 0.1, 1.0))
+		U.rbox(sp, Vector3(0.58, 0.6, 0.06), 0.02, Vector3(0, 0, -0.05), U.mat(Color(0.2, 0.22, 0.24), 0.75, 0.1, 1.0))
 
 func _windows() -> void:
 	# two portholes beside the crew's heads + the optical viewer (periscope) window in the floor near the feet
@@ -247,3 +249,14 @@ func _lighting() -> void:
 	add_child(fill); lights.append(fill)
 	var probe := ReflectionProbe.new(); probe.size = Vector3(2.4, 2.3, 2.4); probe.position = Vector3(0, 1.1, 0); probe.interior = true; probe.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(probe)
+
+## debug: report console panels whose corners poke through the hull lining
+func check_fit(console) -> int:
+	var bad := 0
+	for P in console.panels:
+		var g: Node3D = P.node
+		for c in [Vector3(-P.W * 0.5, -P.H * 0.5, 0.03), Vector3(P.W * 0.5, -P.H * 0.5, 0.03), Vector3(-P.W * 0.5, P.H * 0.5, 0.03), Vector3(P.W * 0.5, P.H * 0.5, 0.03)]:
+			var q := to_local(g.to_global(c))
+			var r := Vector2(q.x, q.z).length()
+			if r > inner_r(q.y) - 0.015: bad += 1; print("[fit] panel ", P.spec.k, " corner r=%.2f lim=%.2f y=%.2f" % [r, inner_r(q.y), q.y])
+	return bad

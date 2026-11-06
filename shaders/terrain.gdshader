@@ -2,6 +2,8 @@
 shader_type spatial;
 uniform sampler2D nz : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D nn : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D macro_col : source_color, filter_linear_mipmap_anisotropic;
+uniform sampler2D macro_nrm : filter_linear_mipmap_anisotropic;
 varying vec3 wp;
 varying float vdist;
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
@@ -21,6 +23,11 @@ void fragment(){
 	// wind ripples in the sand (fade with distance to avoid shimmer)
 	float rip = sin(p.x * 2.1 + p.y * 0.9 + n3 * 6.0) * 0.5 + 0.5;
 	c *= 1.0 - 0.06 * rip * (1.0 - gr) * (1.0 - smoothstep(30.0, 120.0, dist));
+	vec2 muv = (wp.xz + 60000.0) / 120000.0;
+	vec3 mc = texture(macro_col, muv).rgb;
+	c = mix(mc * (0.85 + 0.3 * n3), c, 0.25 * (1.0 - smoothstep(400.0, 3000.0, dist)));
+	vec3 mn = texture(macro_nrm, muv).rgb * 2.0 - 1.0; mn = normalize(vec3(mn.x, mn.z, mn.y));
+	NORMAL = normalize((VIEW_MATRIX * vec4(mn, 0.0)).xyz);
 	ALBEDO = c;
 	ROUGHNESS = mix(0.92, 0.75, rock);
 	vec3 nA = texture(nn, p * 0.08).rgb, nB = texture(nn, p * 0.55).rgb;

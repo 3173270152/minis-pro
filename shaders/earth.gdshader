@@ -37,6 +37,6 @@ void fragment(){
 	// haze toward the limb (thicker air along grazing view)
 	float graze = 1.0 - clamp(dot(n, V), 0.0, 1.0);
 	c = mix(c, vec3(0.45, 0.62, 0.95) * lit, pow(graze, 3.0) * 0.55);
-	ALBEDO = c;
+	ALBEDO = c * 0.62;
 	ALPHA = fade;
 }

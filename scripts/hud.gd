@@ -21,6 +21,7 @@ var btn_crew: Button
 var touch_row: HBoxContainer
 var go_btn: Button
 var cross: Label
+var fps: Label
 var _sub_until := 0.0
 var _t := 0.0
 var font_size := 22
@@ -28,16 +29,23 @@ var font_size := 22
 func _ready() -> void:
 	layer = 10
 	var root := Control.new(); root.set_anchors_preset(Control.PRESET_FULL_RECT); root.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(root)
+	# keep everything clear of the notch / home indicator on phones
+	var safe := DisplayServer.get_display_safe_area(); var win := DisplayServer.window_get_size()
+	if win.x > 0 and safe.size.x > 0 and safe.size.x < win.x:
+		var k := get_viewport().get_visible_rect().size.x / float(win.x)
+		root.offset_left = safe.position.x * k; root.offset_right = -(win.x - safe.end.x) * k
+		root.offset_top = safe.position.y * k; root.offset_bottom = -(win.y - safe.end.y) * k
 	# mission clock (top-left)
 	var tl := VBoxContainer.new(); tl.position = Vector2(28, 18); root.add_child(tl)
 	var cap := _label(tl, "启航号 · 任务时间", 15, Color(0.6, 0.75, 0.9))
 	clock = _label(tl, "T−00:01:00", 54, Color(0.95, 0.97, 1.0))
 	phase_l = _label(tl, "计划内暂停 · HOLD", 18, Color(1.0, 0.72, 0.3))
+	fps = _label(tl, "", 13, Color(0.6, 0.7, 0.8))
 	# telemetry (top-right)
 	tele = _label(root, "", 17, Color(0.85, 0.92, 1.0)); tele.set_anchors_preset(Control.PRESET_TOP_RIGHT); tele.position = Vector2(-250, 22); tele.size = Vector2(230, 160)
 	tele.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	# objective (top-centre)
-	objective = _label(root, "", 19, Color(1, 1, 1)); objective.set_anchors_preset(Control.PRESET_CENTER_TOP); objective.position = Vector2(-380, 22); objective.size = Vector2(760, 60)
+	objective = _label(root, "", 19, Color(1, 1, 1)); objective.anchor_left = 0.24; objective.anchor_right = 0.76; objective.offset_left = 0; objective.offset_right = 0; objective.offset_top = 20; objective.offset_bottom = 90
 	objective.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_shadow(objective)
 	# subtitles (bottom-centre)

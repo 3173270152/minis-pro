@@ -33,10 +33,12 @@ func _build_env() -> void:
 	env.volumetric_fog_enabled = true; env.volumetric_fog_density = 0.0016; env.volumetric_fog_albedo = Color(0.9, 0.88, 0.84)
 	env.volumetric_fog_length = 320.0; env.volumetric_fog_anisotropy = 0.6; env.volumetric_fog_sky_affect = 0.0
 	env.adjustment_enabled = true; env.adjustment_contrast = 1.06; env.adjustment_saturation = 1.05
+	if OS.has_feature("mobile"):
+		env.volumetric_fog_enabled = false; env.ssil_enabled = false; env.ssao_radius = 1.2
 	we.environment = env; add_child(we)
 	sun = DirectionalLight3D.new(); sun.light_energy = 1.6; sun.light_color = Color(1.0, 0.96, 0.9)
 	sun.shadow_enabled = true; sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 900.0; sun.directional_shadow_split_1 = 0.03; sun.directional_shadow_split_2 = 0.12; sun.directional_shadow_split_3 = 0.4
+	sun.directional_shadow_max_distance = 600.0 if OS.has_feature("mobile") else 900.0; sun.directional_shadow_split_1 = 0.03; sun.directional_shadow_split_2 = 0.12; sun.directional_shadow_split_3 = 0.4
 	sun.shadow_blur = 1.2; sun.light_angular_distance = 0.53; sun.shadow_bias = 0.03; sun.shadow_normal_bias = 1.2
 	sun.light_volumetric_fog_energy = 1.0
 	add_child(sun)
@@ -47,23 +49,27 @@ func set_sun(elev: float, az: float) -> void:
 	sun.rotation_degrees = Vector3(-elev, az, 0)
 
 # ---------- terrain ----------
+var grid := PackedFloat32Array()
+const GN := 1025
+const GEXT := 60000.0
+## eroded heightfield baked offline by gen/finish_terrain.py (1025^2 over +-60 km, row = z)
 func height(x: float, z: float) -> float:
+	if grid.is_empty():
+		var f := FileAccess.open("res://gen/height.bin", FileAccess.READ)
+		grid = f.get_buffer(f.get_length()).to_float32_array()
+	var u := clampf((x + GEXT) / (2.0 * GEXT) * (GN - 1), 0.0, GN - 1.001); var v := clampf((z + GEXT) / (2.0 * GEXT) * (GN - 1), 0.0, GN - 1.001)
+	var i := int(u); var j := int(v); var fu := u - i; var fv := v - j
+	var h00 := grid[j * GN + i]; var h10 := grid[j * GN + i + 1]; var h01 := grid[(j + 1) * GN + i]; var h11 := grid[(j + 1) * GN + i + 1]
+	var hh := lerpf(lerpf(h00, h10, fu), lerpf(h01, h11, fu), fv)
 	var d := sqrt(x * x + z * z)
-	var flat := smoothstep(1800.0, 5000.0, d)            # launch site is levelled
-	var dunes := noise.get_noise_2d(x, z) * 9.0 + noise.get_noise_2d(x * 4.0, z * 4.0) * 1.6
-	# Qilian-style range 18-45 km out: domain-warped ridged noise, foothills in front
-	var wx := x + noise.get_noise_2d(x * 0.3, z * 0.3) * 6000.0; var wz := z + noise.get_noise_2d(z * 0.3 + 99.0, x * 0.3) * 6000.0
-	var m := ridge.get_noise_2d(wx, wz) * 0.5 + 0.5
-	var range_mask := smoothstep(14000.0, 32000.0, d) * (0.55 + 0.45 * smoothstep(-0.3, 0.6, -z / maxf(d, 1.0)))
-	var mount := pow(m, 2.2) * 2600.0 * range_mask + noise.get_noise_2d(x * 0.15, z * 0.15) * 260.0 * smoothstep(6000.0, 16000.0, d)
-	return (dunes * (0.15 + 0.85 * flat) + maxf(mount, 0.0)) * flat - 0.4
+	return hh + noise.get_noise_2d(x * 3.0, z * 3.0) * 1.2 * smoothstep(1800.0, 5000.0, d)
 
-func _build_terrain() -> void:
+func make_terrain_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var A := 640; var rings := PackedFloat32Array()
 	var r := 0.0; var dr := 6.0
 	while r < 60000.0:
-		rings.append(r); r += dr; dr = minf(dr * 1.035, 260.0)
+		rings.append(r); r += dr; dr = minf(dr * 1.035, 150.0)
 	var e := 2.0; var n_r := rings.size()
 	for i in n_r:
 		for a in A:
@@ -81,10 +87,14 @@ func _build_terrain() -> void:
 			var i0 := i * A + a; var i1 := (i + 1) * A + a; var i2 := (i + 1) * A + b; var i3 := i * A + b
 			st.add_index(i0); st.add_index(i2); st.add_index(i1); st.add_index(i0); st.add_index(i3); st.add_index(i2)
 	st.generate_tangents()
-	terrain = MeshInstance3D.new(); terrain.mesh = st.commit()
-	terrain.material_override = U.shader_mat("res://shaders/terrain.gdshader", {"nz": U.noise_tex(0.01, false, 31, 1024, 6), "nn": U.noise_tex(0.02, true, 32, 1024, 6, 4.0)})
+	return st.commit()
+
+func _build_terrain() -> void:
+	var mesh: Mesh = load("res://gen/terrain.res") if ResourceLoader.exists("res://gen/terrain.res") else make_terrain_mesh()
+	terrain = MeshInstance3D.new(); terrain.mesh = mesh
+	terrain.material_override = U.shader_mat("res://shaders/terrain.gdshader", {"nz": U.noise_tex(0.01, false, 31, 1024, 6), "nn": U.noise_tex(0.02, true, 32, 1024, 6, 4.0), "macro_col": load("res://tex/terrain/macro_color.png"), "macro_nrm": load("res://tex/terrain/macro_normal.png")})
 	terrain.extra_cull_margin = 2000.0
 	add_child(terrain)
 	# walkable collision for the levelled site
 	var body := StaticBody3D.new(); var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(4000, 2, 4000)
-	cs.shape = bs; cs.position.y = -1.4; body.add_child(cs); add_child(body)
+	cs.shape = bs; cs.position.y = -1.0; body.add_child(cs); add_child(body)

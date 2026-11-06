@@ -15,6 +15,16 @@ const Y_FAIR_TOP := 57.4
 const Y_LES_TOP := 65.2
 const Y_CAPSULE := 47.6   # floor of the return capsule (crew hatch level)
 
+# per-vehicle interface (variants override in build())
+var kind := "qihang"
+var y_cap := Y_CAPSULE      # capsule floor above the core base
+var r_hatch := R_FAIR       # radius of the body at the crew hatch (crew arm length)
+var top := Y_LES_TOP
+var cab := "shenzhou"       # cabin layout: shenzhou / apollo / dragon / shuttle
+var has_les := true
+var land := "land"          # land / sea / runway
+var events: Array = []      # [t, key, label]
+var cap_mount: Node3D       # parent for the crew cabin
 var skin_white: ShaderMaterial
 var stage1: Node3D
 var stage2: Node3D
@@ -24,17 +34,35 @@ var les: Node3D
 var engines: Array[Node3D] = []
 var plume_points: Array[Node3D] = []
 
+func _init(k := "qihang") -> void:
+	kind = k
+
 func _ready() -> void:
 	skin_white = U.shader_mat("res://shaders/skin.gdshader", {"nz": U.noise_tex(0.02, false, 41, 512, 5), "ring_m": 2.4, "seams": 16.0, "grime": 0.35})
 	stage1 = Node3D.new(); stage1.name = "Stage1"; add_child(stage1)
 	stage2 = Node3D.new(); stage2.name = "Stage2"; add_child(stage2)
-	_core_stage()
-	for i in 4: _booster(i)
-	_interstage()
-	_second_stage()
-	_fairing()
-	_les()
-	_markings()
+	if kind in ["saturn", "fh", "shuttle"]:
+		RV.build(self)
+	else:
+		_core_stage()
+		for i in 4: _booster(i)
+		_interstage()
+		_second_stage()
+		_fairing()
+		_les()
+		_markings()
+	cap_mount = Node3D.new(); cap_mount.position.y = y_cap; add_child(cap_mount)
+	if kind in ["saturn", "fh", "shuttle"]:
+		if kind == "shuttle": cap_mount.position.x = -6.3
+		return
+	events = [[8.0, "tower", "程序转弯"], [62.0, "mach", "突破音速"], [75.0, "maxq", "最大动压"], [120.0, "lesj", "逃逸塔分离"], [140.0, "bsep", "助推器分离"],
+		[158.0, "meco", "一级关机"], [160.0, "sep", "一二级分离"], [162.0, "ses", "二级点火"], [200.0, "fair", "整流罩分离"], [300.0, "nom", "飞行正常"], [584.0, "seco", "二级关机"], [590.0, "shipsep", "船箭分离 · 入轨"]]
+	if kind == "cz2f": _cz2f_marks()
+
+func _cz2f_marks() -> void:
+	for c in fairing.get_children(): if c is Label3D: c.text = "神 舟"
+	for c in stage2.get_children(): if c is Label3D: c.text = "CZ-2F"
+	for c in stage1.get_children(): if c is Label3D and c.text == "启航": c.text = "长征二号F"
 
 func _skin(params := {}) -> ShaderMaterial:
 	var m: ShaderMaterial = skin_white.duplicate()
