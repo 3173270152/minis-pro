@@ -32,6 +32,7 @@ var cam_mode := "seat"
 var yaw := 0.0
 var pitch := 0.0
 var zoom := 1.0
+var cdist := 75.0   # external camera distance from the rocket axis (pinch / wheel)
 var shake := 0.0
 var traj: Array = []        # [t, h, x, v, pitch]
 var alt := 0.0
@@ -221,12 +222,12 @@ func _unhandled_input(e: InputEvent) -> void:
 		touches[e.index] = e.position
 		if touches.size() >= 2:
 			var k := touches.keys(); var d: float = (touches[k[0]] as Vector2).distance_to(touches[k[1]])
-			if pinch0 > 0.0: zoom = clampf(zoom * d / pinch0, 1.0, 4.0)
+			if pinch0 > 0.0: _zoom_by(d / pinch0)
 			pinch0 = d; moved = 99.0
 		else: _look(e.relative * 1.4); moved += e.relative.length()
 	elif e is InputEventMouseButton:
-		if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed: zoom = clampf(zoom * 1.12, 1.0, 4.0)
-		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and e.pressed: zoom = clampf(zoom / 1.12, 1.0, 4.0)
+		if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed: _zoom_by(1.12)
+		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and e.pressed: _zoom_by(1.0 / 1.12)
 		elif e.button_index == MOUSE_BUTTON_LEFT:
 			if e.pressed: dragging = true; moved = 0.0
 			else:
@@ -498,10 +499,20 @@ func _camera(dt: float) -> void:
 			cam.rotate_object_local(Vector3.RIGHT, randf_range(-shake, shake)); cam.rotate_object_local(Vector3.UP, randf_range(-shake, shake))
 	else:
 		var tgt := rocket.global_position + rocket.global_transform.basis.y * 30.0
-		var off := Vector3(sin(yaw) * 70.0, 18.0 + pitch * 40.0, cos(yaw) * 70.0) * (1.0 + alt / 20000.0)
-		cam.global_position = tgt + off; cam.look_at(tgt, Vector3.UP)
+		var dir := Vector3(sin(yaw), 0.25 + pitch * 0.57, cos(yaw)).normalized()
+		# never closer than 1 m to the hull: distance is measured from the body surface, not the axis
+		var d := maxf(cdist, _body_r() + 1.0)
+		cam.global_position = tgt + dir * d; cam.look_at(tgt, Vector3.UP)
 		fov = 55.0 / zoom
 	cam.fov = lerpf(cam.fov, fov, minf(1.0, dt * 8.0))
+
+func _body_r() -> float:
+	if stage >= 3: return 2.4
+	return {"saturn": 5.6, "fh": 6.6, "shuttle": 12.5}.get(rocket.kind, 2.6)
+
+func _zoom_by(f: float) -> void:
+	if cam_mode == "seat": zoom = clampf(zoom * f, 1.0, 4.0)
+	else: cdist = clampf(cdist / f, _body_r() + 1.0, 3000.0)
 
 func _ui(dt: float) -> void:
 	hud.clock.text = Hud.fmt_t(T)
