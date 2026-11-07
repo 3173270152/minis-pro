@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.o
+*.lock
+g_bc_multi.h
+VMPHooks.xm
+g_wipe_*.txt
